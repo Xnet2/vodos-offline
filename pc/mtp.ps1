@@ -1,13 +1,11 @@
 ﻿# עבודה מול הנגן דרך MTP (הוא מתחבר כמכשיר נייד, בלי אות כונן), בעזרת Shell.Application של Windows.
 #   mtp.ps1 find                                → האם מחובר נגן עם אפליקציית VODOS, וכמה מקום פנוי בו
 #   mtp.ps1 push   -Local <תיקייה> -List <קובץ>  → מעתיק לנגן את הקבצים שברשימה ועוד לא נמצאים בו
-#   mtp.ps1 notify -Text <הודעה>                 → הודעה קטנה בפינת המסך
 param(
   [Parameter(Position = 0)][string]$Action,
   [string]$Device = '',
   [string]$Local,
   [string]$List,
-  [string]$Text,
   [string]$Target = 'Android\data\il.vodos.offline\files'
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -94,17 +92,6 @@ switch ($Action) {
     Out-Json @{ finished = $true; copied = $done }
   }
 
-  'notify' {
-    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-    $n = New-Object System.Windows.Forms.NotifyIcon
-    $n.Icon = [System.Drawing.SystemIcons]::Information
-    $n.BalloonTipTitle = 'VODOS לנגן'
-    $n.BalloonTipText = $Text
-    $n.Visible = $true
-    $n.ShowBalloonTip(6000)
-    Start-Sleep -Seconds 7
-    $n.Dispose()
-  }
 
   default { Write-Error "unknown action: $Action"; exit 2 }
 }
