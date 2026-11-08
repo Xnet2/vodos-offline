@@ -48,8 +48,22 @@ function ps(args, onLine) {
 }
 
 // ---- ההגדרות והטבלה — כמו באתר ----
+// עד 3 ניסיונות — דרך נטפרי חיבור נכשל לפעמים לרגע
+async function getText(url) {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.text();
+    } catch (e) {
+      if (i === 3) throw new Error(new URL(url).hostname + ': ' + e.message);
+      await new Promise(r => setTimeout(r, 3000 * i));
+    }
+  }
+}
+
 async function loadConfig() {
-  const code = await (await fetch(SITE + 'config.js')).text();
+  const code = await getText(SITE + 'config.js');
   const window = {};
   new Function('window', code)(window);
   return window.VOD_CONFIG || {};
@@ -84,7 +98,7 @@ function isMarketing(text, source, exempt) {
 }
 
 async function loadVideos(cfg) {
-  const rows = parseCSV(await (await fetch(cfg.SHEET_CSV)).text());
+  const rows = parseCSV(await getText(cfg.SHEET_CSV));
   const head = rows.shift();
   const col = (n) => head.indexOf(n);
   const exempt = new Set(cfg.EMOJI_RULE_EXEMPT || []);
