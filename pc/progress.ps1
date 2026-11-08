@@ -20,7 +20,8 @@ $form.Location = New-Object System.Drawing.Point(($area.Right - $form.Width - 16
 
 $iconFile = Join-Path $PSScriptRoot 'icon.png'
 if (Test-Path $iconFile) {
-  $bmp = New-Object System.Drawing.Bitmap $iconFile
+  # נטען דרך הזיכרון, כדי לא לנעול את הקובץ (אחרת אי אפשר לעדכן את התוכנה כשהחלון פתוח)
+  $bmp = [System.Drawing.Image]::FromStream((New-Object IO.MemoryStream (, [IO.File]::ReadAllBytes($iconFile))))
   $form.Icon = [System.Drawing.Icon]::FromHandle((New-Object System.Drawing.Bitmap $bmp, 32, 32).GetHicon())
   $pic = New-Object System.Windows.Forms.PictureBox
   $pic.Image = $bmp; $pic.SizeMode = 'Zoom'
