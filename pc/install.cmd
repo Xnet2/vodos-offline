@@ -6,8 +6,6 @@ set "DEST=%LOCALAPPDATA%\VODOS-M36\app"
 mkdir "%DEST%" 2>nul
 copy /y "%~dp0sync.mjs" "%DEST%\" >nul
 copy /y "%~dp0mtp.ps1" "%DEST%\" >nul
-copy /y "%~dp0progress.ps1" "%DEST%\" >nul
-copy /y "%~dp0icon.png" "%DEST%\" >nul
 for /f "delims=" %%n in ('where node 2^>nul') do set "NODE=%%n" & goto found
 rem אין Node.js — מתקינים אותו (התוכנה כתובה ב-Node)
 echo מתקין Node.js...

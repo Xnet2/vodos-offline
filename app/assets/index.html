@@ -49,6 +49,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .slide.paused .paused-ico{opacity:.7}
 .bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.25);z-index:3;pointer-events:none}
 .bar i{display:block;height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:right center}
+/* העתקה מהמחשב: גלולה לבנה מתחת לראש, עם פס התקדמות; בסוף — "נוספו X סרטונים · הצג" */
+.syncpill{position:absolute;z-index:24;top:58px;left:50%;transform:translate(-50%,-12px);min-width:200px;max-width:86%;padding:8px 14px 9px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13.5px;font-weight:700;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .3s}
+.syncpill.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.syncpill small{display:block;margin-top:1px;font-size:12px;font-weight:600;color:#8a8b91}
+.syncpill .track{height:4px;margin-top:7px;border-radius:2px;background:#eceef1;overflow:hidden}
+.syncpill .track i{display:block;height:100%;width:0;background:linear-gradient(90deg,#25f4ee,#fe2c55);transition:width .4s}
+.syncpill.ready{color:var(--accent)}
+.syncpill.ready .track{display:none}
 /* טבעת טעינה כמו באתר — מופיעה רק אם הטעינה באמת לוקחת זמן */
 .loader{position:absolute;z-index:3;width:44px;height:44px;border-radius:50%;border:7px solid #fff;pointer-events:none;opacity:0;transition:opacity .2s;animation:spin 1s linear infinite}
 .loader::before,.loader::after{content:"";position:absolute;top:-7px;left:-7px;right:-7px;bottom:-7px;border-radius:50%;border:7px solid;z-index:-1}
@@ -72,6 +80,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 </header>
 <nav class="menu" id="menu" hidden></nav>
 <main class="feed" id="feed"></main>
+<button class="syncpill" id="syncpill" type="button"><span id="syncText"></span><small id="syncSub"></small><div class="track"><i id="syncBar"></i></div></button>
 </div>
 <script>
 (function () {
@@ -232,6 +241,28 @@ document.getElementById('feedtabs').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (!b || b.getAttribute('data-feed') === feedMode) return;
   feedMode = b.getAttribute('data-feed'); set('vod_feed', feedMode); showTab(); reload();
 });
+
+// ---- העתקה מהמחשב: מה מצב ההעתקה (כל שנייה וחצי) ----
+var pill = document.getElementById('syncpill');
+function syncStatus() { try { return JSON.parse(VODOS.status()); } catch (e) { return {}; } }
+var shownSync = window.VODOS && VODOS.status ? syncStatus() : null;
+var loadedId = shownSync && shownSync.finished ? shownSync.id : 0; // העתקה שהסתיימה לפני שהפיד נטען — כבר בפנים
+function pollSync() {
+  var s = syncStatus();
+  pill.classList.remove('ready');
+  if (s.active) {
+    document.getElementById('syncText').textContent = 'מעתיק סרטונים מהמחשב…';
+    document.getElementById('syncSub').textContent = s.done + ' מתוך ' + s.total + ' · אל תנתקו את הנגן';
+    document.getElementById('syncBar').style.width = (s.total ? s.done / s.total * 100 : 0) + '%';
+    pill.classList.add('show');
+  } else if (s.finished && s.id !== loadedId) {
+    document.getElementById('syncText').textContent = s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓';
+    document.getElementById('syncSub').textContent = '';
+    pill.classList.add('show', 'ready');
+  } else pill.classList.remove('show');
+}
+pill.addEventListener('click', function () { if (pill.classList.contains('ready')) location.reload(); });
+if (shownSync) { pollSync(); setInterval(pollSync, 1500); }
 
 window.vodosPause = function () { if (activeVideo) activeVideo.pause(); };
 window.vodosBack = function () { if (!menu.hidden) { closeMenu(); return true; } return false; };

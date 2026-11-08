@@ -70,22 +70,35 @@ switch ($Action) {
     foreach ($i in $folder.Items()) { $have[$i.Name] = $true }
     # [string] — בלי זה כל שורה נושאת מאפיינים של PowerShell, וה-JSON מתנפח למגה-בייטים
     $names = Get-Content -LiteralPath $List -Encoding UTF8 | ForEach-Object { [string]$_ } | Where-Object { $_ -and -not $have.ContainsKey($_) }
-    Out-Json @{ todo = @($names).Count; existing = $have.Count }
-    $done = 0
-    foreach ($n in $names) {
+    $names = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $Local $_) })
+    Out-Json @{ todo = $names.Count; existing = $have.Count }
+
+    function Copy-One($n) {
       $path = Join-Path $Local $n
-      if (-not (Test-Path -LiteralPath $path)) { continue }
       $size = (Get-Item -LiteralPath $path).Length
       $folder.CopyHere($path, 4 + 16 + 1024)  # בלי חלון התקדמות, "כן לכל", בלי חלונות שגיאה
       # ההעתקה רצה ברקע — מחכים שהקובץ יופיע בנגן (אחרת סגירת התהליך עוצרת אותה)
       $deadline = (Get-Date).AddSeconds(30 + $size / 1MB * 3)
-      $ok = $false
       while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 400
         $it = $folder.ParseName($n)
         if (-not $it) { $it = Get-Child $folder $n }
-        if ($it -and [double]$it.ExtendedProperty('System.Size') -ge $size) { $ok = $true; break }
+        if ($it -and [double]$it.ExtendedProperty('System.Size') -ge $size) { return $true }
       }
+      return $false
+    }
+
+    # קודם רשימת הקבצים שעומדים להגיע (sync-*.json) — ממנה האפליקציה בנגן מציגה את ההתקדמות
+    if ($names.Count) {
+      $sync = 'sync-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + '.json'
+      $json = @{ total = $names.Count; files = $names } | ConvertTo-Json -Compress
+      [IO.File]::WriteAllText((Join-Path $Local $sync), $json, (New-Object Text.UTF8Encoding $false))
+      [void](Copy-One $sync)
+      Remove-Item -LiteralPath (Join-Path $Local $sync) -ErrorAction SilentlyContinue
+    }
+    $done = 0
+    foreach ($n in $names) {
+      $ok = Copy-One $n
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }
     }

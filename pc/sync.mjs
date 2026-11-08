@@ -47,18 +47,6 @@ function ps(args, onLine) {
   });
 }
 
-// ---- חלון ההתקדמות (progress.ps1) ----
-const STATE = join(HOME, 'progress.json');
-let win = null;
-function progress(state) {
-  try { writeFileSync(STATE, JSON.stringify(state)); } catch {}
-}
-function showWindow() {
-  if (win && win.exitCode === null) return; // כבר פתוח
-  win = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', join(here, 'progress.ps1'), '-State', STATE], { windowsHide: true });
-  win.on('error', () => { win = null; });
-}
-
 // ---- ההגדרות והטבלה — כמו באתר ----
 async function loadConfig() {
   const code = await (await fetch(SITE + 'config.js')).text();
@@ -156,10 +144,7 @@ async function doRefresh() {
       const name = nameOf(v), path = join(CACHE, name);
       if (!existsSync(path)) {
         if ((failed.get(v.videoUrl) || 0) > Date.now()) continue;
-        try {
-          await download(v.videoUrl, path); fresh++;
-          if (syncing) progress({ phase: 'download', text: `הורדו ${fresh} סרטונים חדשים…` });
-        }
+        try { await download(v.videoUrl, path); fresh++; }
         catch (e) { failed.set(v.videoUrl, Date.now() + 6 * 3600 * 1000); continue; }
       }
       bytes += statSync(path).size;
@@ -215,33 +200,19 @@ async function push(free) {
   const list = join(HOME, 'push-list.txt');
   writeFileSync(list, names.join('\n'), 'utf8');
 
+  // ההתקדמות מוצגת בנגן עצמו: mtp.ps1 שולח קודם רשימה (sync-*.json), והאפליקציה סופרת מה כבר הגיע
   log(`מעתיק לנגן (${videos.length} סרטונים ברשימה)…`);
-  progress({ phase: 'copy', text: 'בודק מה כבר נמצא בנגן…' });
-  let total = 0;
-  const out = await ps(['push', '-Local', CACHE, '-List', list], (o) => {
-    if ('todo' in o) total = o.todo;
-    if (o.file) progress({ phase: 'copy', done: o.done, total, text: `${o.done} מתוך ${total} קבצים` });
-  });
+  const out = await ps(['push', '-Local', CACHE, '-List', list]);
   const err = out.find(o => o.error);
   if (err) throw new Error(err.error);
   const copied = out.filter(o => o.file && o.ok && /\.(mp4|mov|m4v|webm)$/.test(o.file)).length;
   const bad = out.filter(o => o.file && !o.ok).length;
   log(`הועתקו ${copied} סרטונים חדשים` + (bad ? `, ${bad} נכשלו` : ''));
-  progress({ phase: 'done', text: (copied ? `הועתקו ${copied} סרטונים חדשים.` : 'אין סרטונים חדשים.') + ' אפשר לנתק את הנגן.' });
 }
 
-// סנכרון מלא כשהנגן מתחבר — עם החלון בפינה
-let syncing = false; // רק אז ההורדות מדווחות לחלון
 async function syncDevice(dev) {
-  syncing = true;
-  progress({ phase: 'check', text: 'בודק סרטונים חדשים…' });
-  showWindow();
   try { await refresh(); await push(dev.free); }
-  catch (e) {
-    log('שגיאה בהעתקה:', e.message);
-    progress({ phase: 'error', text: 'הנגן נותק או לא זמין. חברו אותו שוב כדי להמשיך.' });
-  }
-  syncing = false;
+  catch (e) { log('שגיאה בהעתקה:', e.message); }
 }
 
 // ---- לולאה ראשית ----

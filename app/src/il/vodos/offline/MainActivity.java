@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -41,6 +42,7 @@ public class MainActivity extends Activity {
     web.loadUrl("file:///android_asset/index.html");
     setContentView(web);
     markFolders();
+    if (Build.VERSION.SDK_INT >= 21) SyncJob.schedule(this); // התראות כשמחברים למחשב
   }
 
   // יוצר את התיקייה של האפליקציה (בזיכרון הפנימי ובכרטיס) עם קובץ סימון, ומודיע עליו למערכת —
@@ -83,16 +85,27 @@ public class MainActivity extends Activity {
         keep.add(best.getName());
         Matcher m = Pattern.compile("\"(?:f|avatar)\":\"([^\"]+)\"").matcher(json);
         while (m.find()) keep.add(m.group(1));
+        // גם מה שבדרך מהמחשב (או נשאר מהעתקה שנקטעה) — לא למחוק
+        File sync = Sync.newestSync(MainActivity.this);
+        if (sync != null) {
+          keep.add(sync.getName());
+          Matcher sm = Pattern.compile("\"([^\"]+)\"").matcher(Sync.read(sync));
+          while (sm.find()) keep.add(sm.group(1));
+        }
         File[] list = bestDir.listFiles();
         if (list != null) for (File f : list) {
           String n = f.getName();
-          if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
+          if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
         }
         return "{\"base\":" + quote(Uri.fromFile(bestDir).toString() + "/") + ",\"index\":" + json + "}";
       } catch (Exception e) {
         return "{}";
       }
     }
+
+    // מצב ההעתקה מהמחשב, לפס ההתקדמות בפיד: {"active":…,"finished":…,"done":…,"total":…,"videos":…,"id":…}
+    @JavascriptInterface
+    public String status() { return Sync.read(MainActivity.this).json(); }
 
     @JavascriptInterface
     public void immersive() {
