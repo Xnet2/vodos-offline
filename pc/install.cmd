@@ -3,6 +3,8 @@ chcp 65001 >nul
 rem מתקין את "VODOS לנגן": מעתיק את התוכנה ל-%LOCALAPPDATA%\VODOS-M36\app
 rem ומוסיף אותה להפעלה האוטומטית של Windows (רצה ברקע, בלי חלון).
 set "DEST=%LOCALAPPDATA%\VODOS-M36\app"
+rem עדכון: עוצרים את הגרסה שכבר רצה ברקע, כדי שלא ירוצו שתיים
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*VODOS*\app\sync.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
 mkdir "%DEST%" 2>nul
 copy /y "%~dp0sync.mjs" "%DEST%\" >nul
 copy /y "%~dp0mtp.ps1" "%DEST%\" >nul

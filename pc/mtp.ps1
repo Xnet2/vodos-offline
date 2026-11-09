@@ -1,5 +1,6 @@
 ﻿# עבודה מול הנגן דרך MTP (הוא מתחבר כמכשיר נייד, בלי אות כונן), בעזרת Shell.Application של Windows.
 #   mtp.ps1 find                                → האם מחובר נגן עם אפליקציית VODOS, וכמה מקום פנוי בו
+#   mtp.ps1 state  -Local <תיקייה>              → אילו קבצים כבר בנגן, ומה כתוב ב-state האחרון של האפליקציה
 #   mtp.ps1 push   -Local <תיקייה> -List <קובץ>  → מעתיק לנגן את הקבצים שברשימה ועוד לא נמצאים בו
 param(
   [Parameter(Position = 0)][string]$Action,
@@ -54,6 +55,29 @@ switch ($Action) {
     if (-not $s) { Out-Json @{ connected = $false }; break }
     $free = $s.ExtendedProperty('System.FreeSpace')
     Out-Json @{ connected = $true; storage = $s.Name; free = [double]$free }
+  }
+
+  # מה כבר יש בנגן, וקובץ ה-state האחרון של האפליקציה (אהבתי / נצפו / הגדרות) — מועתק ל-<Local> ונקרא משם
+  'state' {
+    $s = Get-Storage
+    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    $folder = Get-Path $s.GetFolder $Target
+    if (-not $folder) { Out-Json @{ have = @(); state = $null }; break }
+    $items = @($folder.Items())
+    $have = @($items | ForEach-Object { [string]$_.Name })
+    $text = $null
+    $states = @($items | Where-Object { $_.Name -match '^state-\d+\.json$' } | Sort-Object { [long]($_.Name -replace '\D', '') } -Descending)
+    foreach ($st in $states) {
+      $dest = Join-Path $Local $st.Name
+      Remove-Item -LiteralPath $dest -ErrorAction SilentlyContinue
+      (New-Object -ComObject Shell.Application).Namespace($Local).CopyHere($st, 4 + 16 + 1024)
+      $deadline = (Get-Date).AddSeconds(20)
+      while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $dest)) { Start-Sleep -Milliseconds 300 }
+      Start-Sleep -Milliseconds 300
+      try { $text = [IO.File]::ReadAllText($dest, [Text.Encoding]::UTF8); Remove-Item -LiteralPath $dest } catch { $text = $null }
+      if ($text) { break }
+    }
+    Out-Json @{ have = $have; state = $text }
   }
 
   'push' {

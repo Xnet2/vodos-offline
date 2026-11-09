@@ -1,35 +1,63 @@
 package il.vodos.offline;
 
 import android.app.Activity;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 // VODOS לנגן: מסך מלא עם הפיד (assets/index.html), שמנגן את הסרטונים שתוכנת הסנכרון במחשב
 // העתיקה לתיקייה של האפליקציה: Android/data/il.vodos.offline/files (בכרטיס הזיכרון או בזיכרון הפנימי).
 public class MainActivity extends Activity {
   private WebView web;
+  private FrameLayout root;
+  private ImageView splash;
+  private final Handler ui = new Handler();
+  private volatile String status;
+  private volatile boolean resumed;
 
   @Override
   protected void onCreate(Bundle state) {
     super.onCreate(state);
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    // קודם הלוגו, מיד — יצירת ה-WebView לוקחת שנייה-שתיים בנגן, ובלי זה רואים מסך שחור
+    root = new FrameLayout(this);
+    root.setBackgroundColor(Color.BLACK);
+    splash = new ImageView(this);
+    try (InputStream in = getAssets().open("logo.png")) { splash.setImageBitmap(BitmapFactory.decodeStream(in)); } catch (Exception e) {}
+    int w = getResources().getDisplayMetrics().widthPixels / 2;
+    root.addView(splash, new FrameLayout.LayoutParams(w, w, Gravity.CENTER));
+    setContentView(root);
+    ui.post(this::createWeb);
+    new Thread(this::markFolders).start();
+    if (Build.VERSION.SDK_INT >= 21) SyncJob.schedule(this); // התראות כשמחברים למחשב
+  }
+
+  private void createWeb() {
     web = new WebView(this);
     web.setBackgroundColor(Color.BLACK);
     WebSettings s = web.getSettings();
@@ -39,10 +67,13 @@ public class MainActivity extends Activity {
     s.setAllowFileAccessFromFileURLs(true);
     s.setMediaPlaybackRequiresUserGesture(false);
     web.addJavascriptInterface(new Bridge(), "VODOS");
+    web.setWebViewClient(new WebViewClient() {
+      @Override public void onPageFinished(WebView v, String url) {
+        if (splash != null) { root.removeView(splash); splash = null; }
+      }
+    });
+    root.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
     web.loadUrl("file:///android_asset/index.html");
-    setContentView(web);
-    markFolders();
-    if (Build.VERSION.SDK_INT >= 21) SyncJob.schedule(this); // התראות כשמחברים למחשב
   }
 
   // יוצר את התיקייה של האפליקציה (בזיכרון הפנימי ובכרטיס) עם קובץ סימון, ומודיע עליו למערכת —
@@ -56,17 +87,39 @@ public class MainActivity extends Activity {
     }
   }
 
+  // מצב ההעתקה נבדק ברקע (סריקת התיקייה בכרטיס איטית — לא על חשבון הגלילה):
+  // כל שנייה וחצי בזמן העתקה, אחרת כל 6 שניות, ורק כשהאפליקציה פתוחה
+  private final Runnable pollStatus = new Runnable() {
+    @Override public void run() {
+      if (!resumed) return;
+      new Thread(() -> {
+        Sync.Status st = Sync.read(MainActivity.this);
+        status = st.json();
+        ui.postDelayed(pollStatus, st.active ? 1500 : 6000);
+      }).start();
+    }
+  };
+
   @Override
-  protected void onPause() { super.onPause(); web.evaluateJavascript("window.vodosPause&&vodosPause()", null); }
+  protected void onResume() { super.onResume(); resumed = true; ui.removeCallbacks(pollStatus); ui.post(pollStatus); }
+
+  @Override
+  protected void onPause() {
+    super.onPause();
+    resumed = false;
+    if (web != null) web.evaluateJavascript("window.vodosPause&&vodosPause()", null);
+  }
 
   @Override
   public void onBackPressed() {
+    if (web == null) { finish(); return; }
     web.evaluateJavascript("window.vodosBack?vodosBack():false", v -> { if (!"true".equals(v)) finish(); });
   }
 
   class Bridge {
     // מחזיר את רשימת הסרטונים העדכנית: {"base":"file:///…/files/","index":{…}}
-    // ובדרך מנקה רשימות ישנות וסרטונים שכבר לא ברשימה (כדי שהנגן לא יתמלא)
+    // סרטונים שסומנו "אהבתי" נשארים גם אם הם כבר לא ברשימה מהמחשב.
+    // הניקוי (רשימות ישנות וסרטונים שכבר לא ברשימה) נעשה ברקע, כדי שהפיד ייפתח מהר
     @JavascriptInterface
     public String index() {
       File best = null, bestDir = null;
@@ -80,24 +133,38 @@ public class MainActivity extends Activity {
       }
       if (best == null) return "{}";
       try {
-        String json = read(best);
-        Set<String> keep = new HashSet<>();
+        JSONObject index = new JSONObject(read(best));
+        JSONArray videos = index.optJSONArray("videos");
+        if (videos == null) index.put("videos", videos = new JSONArray());
+        final Set<String> keep = new HashSet<>();
         keep.add(best.getName());
-        Matcher m = Pattern.compile("\"(?:f|avatar)\":\"([^\"]+)\"").matcher(json);
-        while (m.find()) keep.add(m.group(1));
+        for (int i = 0; i < videos.length(); i++) keep.add(videos.getJSONObject(i).optString("f"));
+        JSONObject sources = index.optJSONObject("sources");
+        if (sources != null) for (java.util.Iterator<String> it = sources.keys(); it.hasNext(); ) keep.add(sources.getJSONObject(it.next()).optString("avatar"));
+        JSONArray likes = likes(bestDir);
+        for (int i = 0; i < likes.length(); i++) {
+          JSONObject v = likes.getJSONObject(i);
+          String f = v.optString("f");
+          if (!keep.contains(f) && new File(bestDir, f).exists()) { videos.put(v); keep.add(f); }
+        }
         // גם מה שבדרך מהמחשב (או נשאר מהעתקה שנקטעה) — לא למחוק
         File sync = Sync.newestSync(MainActivity.this);
         if (sync != null) {
           keep.add(sync.getName());
-          Matcher sm = Pattern.compile("\"([^\"]+)\"").matcher(Sync.read(sync));
-          while (sm.find()) keep.add(sm.group(1));
+          try {
+            JSONArray files = new JSONObject(Sync.read(sync)).getJSONArray("files");
+            for (int i = 0; i < files.length(); i++) keep.add(files.getString(i));
+          } catch (Exception e) {}
         }
-        File[] list = bestDir.listFiles();
-        if (list != null) for (File f : list) {
-          String n = f.getName();
-          if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
-        }
-        return "{\"base\":" + quote(Uri.fromFile(bestDir).toString() + "/") + ",\"index\":" + json + "}";
+        final File dir = bestDir;
+        new Thread(() -> {
+          File[] list = dir.listFiles();
+          if (list != null) for (File f : list) {
+            String n = f.getName();
+            if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
+          }
+        }).start();
+        return "{\"base\":" + JSONObject.quote(Uri.fromFile(bestDir).toString() + "/") + ",\"index\":" + index + "}";
       } catch (Exception e) {
         return "{}";
       }
@@ -105,12 +172,44 @@ public class MainActivity extends Activity {
 
     // מצב ההעתקה מהמחשב, לפס ההתקדמות בפיד: {"active":…,"finished":…,"done":…,"total":…,"videos":…,"id":…}
     @JavascriptInterface
-    public String status() { return Sync.read(MainActivity.this).json(); }
+    public String status() {
+      if (status == null) status = Sync.read(MainActivity.this).json(); // בטעינה הראשונה — מיד
+      return status;
+    }
+
+    // מה שהמחשב צריך לדעת מהנגן: אהבתי, מה נצפה, וההגדרות. נשמר כ-state-<זמן>.json בכל תיקייה של האפליקציה;
+    // התוכנה במחשב קוראת את החדש ביותר בחיבור הבא
+    @JavascriptInterface
+    public void saveState(final String json) {
+      new Thread(() -> {
+        String name = "state-" + System.currentTimeMillis() + ".json";
+        for (File dir : getExternalFilesDirs(null)) {
+          if (dir == null) continue;
+          List<String> scan = new ArrayList<>();
+          File out = new File(dir, name);
+          try (FileOutputStream o = new FileOutputStream(out)) { o.write(json.getBytes("UTF-8")); } catch (Exception e) { continue; }
+          scan.add(out.getPath());
+          File[] list = dir.listFiles();
+          if (list != null) for (File f : list) {
+            if (f.getName().matches("state-\\d+\\.json") && !f.getName().equals(name) && f.delete()) scan.add(f.getPath());
+          }
+          MediaScannerConnection.scanFile(MainActivity.this, scan.toArray(new String[0]), null, null);
+        }
+      }).start();
+    }
 
     @JavascriptInterface
     public void immersive() {
       runOnUiThread(() -> web.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY));
     }
+  }
+
+  // הסרטונים שסומנו "אהבתי", מקובץ ה-state האחרון: [{f,s,t,ts}, …]
+  private static JSONArray likes(File dir) {
+    File best = null;
+    File[] list = dir.listFiles();
+    if (list != null) for (File f : list) if (f.getName().matches("state-\\d+\\.json") && (best == null || stamp(f) > stamp(best))) best = f;
+    try { return new JSONObject(read(best)).getJSONArray("likes"); } catch (Exception e) { return new JSONArray(); }
   }
 
   private static long stamp(File f) {
@@ -124,9 +223,5 @@ public class MainActivity extends Activity {
       while (off < buf.length && (n = in.read(buf, off, buf.length - off)) > 0) off += n;
       return new String(buf, 0, off, "UTF-8");
     }
-  }
-
-  private static String quote(String s) {
-    return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
   }
 }

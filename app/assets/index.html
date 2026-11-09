@@ -64,6 +64,26 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .loader::after{border-color:#fe2c55;transform:translate(3px,3px)}
 .slide.loading .loader{opacity:1;transition-delay:.35s}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* אהבתי — נשמר בנגן גם אחרי שנצפה, ולא נכלל במכסה */
+.like{display:flex;flex-direction:column;align-items:center;margin-bottom:16px;font-size:12px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.like svg{width:36px;height:36px;fill:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));transition:transform .15s}
+.like[aria-pressed=true] svg{fill:var(--accent)}
+.like.pop svg{transform:scale(1.25)}
+.gear{position:absolute;left:10px;top:12px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.gear svg{width:23px;height:23px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.toast{position:absolute;z-index:30;left:50%;bottom:90px;transform:translateX(-50%);max-width:86%;padding:9px 16px;border-radius:12px;background:rgba(22,24,35,.86);font-size:14px;font-weight:600;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+.sheetbg{position:absolute;top:0;left:0;right:0;bottom:0;z-index:40;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
+.sheet{width:100%;padding:18px 18px 22px;border-radius:16px 16px 0 0;background:#fff;color:var(--ink)}
+.sheet h2{font-size:18px;margin-bottom:4px}
+.sheet .note{font-size:13px;color:#8a8b91;line-height:1.5;margin-bottom:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #eceef1}
+.row b{display:block;font-size:15px}
+.row small{display:block;font-size:12.5px;color:#8a8b91}
+.step{display:flex;align-items:center;gap:6px;flex:none;direction:ltr}
+.step button{width:34px;height:34px;border-radius:50%;background:#f1f1f2;font-size:20px;font-weight:700;line-height:1}
+.step output{min-width:58px;text-align:center;font-weight:800;font-size:15px}
+.sheet .done{width:100%;margin-top:12px;padding:11px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px}
 .state,.endslide{height:100%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);line-height:1.7;font-size:15px}
 .state h2,.endslide h2{color:var(--fg);font-size:20px;margin-bottom:6px}
 .state img{height:28px;margin-bottom:24px}
@@ -76,11 +96,25 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <nav class="feedtabs" id="feedtabs">
     <button type="button" data-feed="latest" aria-selected="true">עדכני</button>
     <button type="button" data-feed="unwatched" aria-selected="false">לא נצפו</button>
+    <button type="button" data-feed="liked" aria-selected="false">אהבתי</button>
   </nav>
+  <button class="gear" id="gear" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
 <nav class="menu" id="menu" hidden></nav>
 <main class="feed" id="feed"></main>
 <button class="syncpill" id="syncpill" type="button"><span id="syncText"></span><small id="syncSub"></small><div class="track"><i id="syncBar"></i></div></button>
+<div class="toast" id="toast"></div>
+<div class="sheetbg" id="settings" hidden>
+  <div class="sheet">
+    <h2>הגדרות</h2>
+    <p class="note">ההגדרות עוברות למחשב בחיבור הבא. סרטונים שנצפו מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
+    <div class="row"><div><b>נפח במחשב</b><small>כמה סרטונים להוריד ולשמור במחשב</small></div>
+      <div class="step"><button type="button" data-k="pcGB" data-d="-1">−</button><output id="pcGB"></output><button type="button" data-k="pcGB" data-d="1">+</button></div></div>
+    <div class="row"><div><b>נפח בנגן</b><small>כמה סרטונים להעביר לנגן בכל חיבור</small></div>
+      <div class="step"><button type="button" data-k="deviceGB" data-d="-1">−</button><output id="deviceGB"></output><button type="button" data-k="deviceGB" data-d="1">+</button></div></div>
+    <button class="done" id="settingsDone" type="button">סגירה</button>
+  </div>
+</div>
 </div>
 <script>
 (function () {
@@ -118,12 +152,48 @@ function markWatched(f) {
   if (watched[f]) return; watched[f] = 1; watchedList.push(f);
   if (watchedList.length > WATCHED_MAX) watchedList.splice(0, watchedList.length - WATCHED_MAX).forEach(function (x) { delete watched[x]; });
   set('vod_watched', watchedList);
+  saveState();
 }
 
-var feedMode = get('vod_feed', 'latest') === 'unwatched' ? 'unwatched' : 'latest';
+// אהבתי: [{f,s,t,ts}] — נשמר בנגן גם אחרי שנצפה
+var likes = get('vod_likes', []), liked = {};
+likes.forEach(function (v) { liked[v.f] = 1; });
+function toggleLike(v) {
+  if (liked[v.f]) { delete liked[v.f]; likes = likes.filter(function (x) { return x.f !== v.f; }); }
+  else { liked[v.f] = 1; likes.push({ f: v.f, s: v.s, t: v.t, ts: v.ts }); toast('נשמר — הסרטון יישאר בנגן'); }
+  set('vod_likes', likes);
+  saveState(true);
+}
+
+var GB_STEPS = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
+var settings = get('vod_settings', { pcGB: 2, deviceGB: 2 });
+
+// מה שהמחשב צריך לדעת מהנגן — נכתב לקובץ בתיקייה של האפליקציה ונקרא בחיבור הבא
+var saveTimer = null;
+function saveState(now) {
+  if (!window.VODOS || !VODOS.saveState) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function () {
+    saveTimer = null;
+    VODOS.saveState(JSON.stringify({
+      saved: new Date().toISOString(), settings: settings, likes: likes,
+      watched: ALL.filter(function (v) { return watched[v.f]; }).map(function (v) { return v.f; }),
+    }));
+  }, now ? 0 : 4000);
+}
+
+var toastEl = document.getElementById('toast'), toastTimer = null;
+function toast(text) {
+  toastEl.textContent = text; toastEl.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
+}
+
+var FEEDS = { latest: 1, unwatched: 1, liked: 1 };
+var feedMode = get('vod_feed', 'latest'); if (!FEEDS[feedMode]) feedMode = 'latest';
 var source = get('vod_source', '');
 if (source && !sources[source]) source = '';
-var list = [], shown = 0, activeVideo = null, watchTimer = null;
+var list = [], shown = 0, cur = -1, activeVideo = null, watchTimer = null;
+var HEART = '<svg viewBox="0 0 24 24"><path d="M12 21.2l-1.5-1.3C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.5 11.4L12 21.2z"/></svg>';
 
 function avatarHtml(s) {
   var src = sources[s] || {}, a = src.avatar || '', name = src.name || s;
@@ -144,10 +214,15 @@ function slide(v) {
     '<div class="shade"></div>' +
     '<div class="info"><div class="who"><b>@' + esc(name) + '</b><time>' + ago(v.ts) + '</time></div>' +
     (v.t ? '<p class="title">' + fmt(v.t) + '</p>' : '') + '</div>' +
-    '<div class="side">' + avatarHtml(v.s) + '</div>' +
+    '<div class="side"><button class="like" type="button" aria-pressed="' + !!liked[v.f] + '">' + HEART + 'אהבתי</button>' + avatarHtml(v.s) + '</div>' +
     '<div class="bar"><i></i></div>';
-  var video = el.querySelector('video'), bar = el.querySelector('.bar i'), title = el.querySelector('.title');
+  var video = el.querySelector('video'), bar = el.querySelector('.bar i'), title = el.querySelector('.title'), like = el.querySelector('.like');
   video._f = v.f;
+  like.addEventListener('click', function (e) {
+    e.stopPropagation(); toggleLike(v);
+    like.setAttribute('aria-pressed', String(!!liked[v.f]));
+    like.classList.add('pop'); setTimeout(function () { like.classList.remove('pop'); }, 160);
+  });
   video.addEventListener('loadedmetadata', function () { if (video.videoWidth > video.videoHeight) el.classList.add('landscape'); });
   video.addEventListener('timeupdate', function () { if (video.duration) bar.style.transform = 'scaleX(' + (video.currentTime / video.duration) + ')'; });
   video.addEventListener('ended', function () {
@@ -156,69 +231,111 @@ function slide(v) {
   });
   video.addEventListener('play', function () { el.classList.remove('outro', 'paused'); });
   video.addEventListener('waiting', function () { el.classList.add('loading'); });
-  video.addEventListener('playing', function () { el.classList.remove('loading'); });
+  video.addEventListener('playing', function () {
+    el.classList.remove('loading');
+    if (video !== activeVideo) video.pause(); // play() שהתעכב והתחיל אחרי שכבר גללו הלאה
+  });
   if (title) title.addEventListener('click', function (e) { e.stopPropagation(); title.classList.toggle('open'); });
   el.addEventListener('click', function () {
     if (!menu.hidden) return closeMenu();
     if (video.paused) play(video); else { video.pause(); el.classList.add('paused'); }
   });
-  io.observe(el);
   return el;
 }
 
 function play(video) {
   if (video.readyState < 3) video.parentNode.classList.add('loading');
-  if (!video.getAttribute('src')) video.src = video.getAttribute('data-src');
-  video.currentTime = video.ended ? 0 : video.currentTime;
+  if (!video.getAttribute('src')) { video.preload = 'auto'; video.src = video.getAttribute('data-src'); }
+  if (video.ended) video.currentTime = 0; // רק בסוף — כל השמה ל-currentTime היא קפיצה בקובץ שמעכבת את ההתחלה
   var p = video.play(); if (p && p.catch) p.catch(function () {});
 }
 
-var io = new IntersectionObserver(function (entries) {
-  entries.forEach(function (en) {
-    var el = en.target, video = el.querySelector('video');
-    if (en.isIntersecting && en.intersectionRatio > 0.6) {
-      activeVideo = video; play(video);
-      clearTimeout(watchTimer);
-      watchTimer = setTimeout(function () { if (activeVideo === video) markWatched(video._f); }, 1500);
-      if (el === feed.lastElementChild || el.nextElementSibling === feed.lastElementChild) more();
-      // סרטונים רחוקים משחררים את הקובץ, כדי שהנגן לא יאט
-      var all = feed.querySelectorAll('.slide video'), i = Array.prototype.indexOf.call(all, video);
-      for (var j = 0; j < all.length; j++) if (Math.abs(j - i) > 2 && all[j].getAttribute('src')) { all[j].pause(); all[j].removeAttribute('src'); all[j].load(); }
-      // הסרטון הבא מתחיל להיטען מראש, כדי שהמעבר אליו יהיה מיידי
-      var next = all[i + 1];
-      if (next && !next.getAttribute('src')) { next.preload = 'auto'; next.src = next.getAttribute('data-src'); }
-    } else if (!en.isIntersecting || en.intersectionRatio < 0.4) {
-      video.pause();
-      el.classList.remove('outro', 'paused');
-    }
-  });
-}, { threshold: [0, 0.4, 0.6, 1] });
+function release(video) {
+  video.pause();
+  if (video.getAttribute('src')) { video.removeAttribute('src'); video.load(); }
+}
+
+// איזה סרטון פעיל נקבע לפי מיקום הגלילה: ברגע שעוברים את חצי המסך — הקודם נעצר והחדש מתחיל.
+// פתוחים רק שני נגנים בכל רגע (הנוכחי והבא אחריו) — יותר מזה חונק את הנגן והטעינה נמרחת
+function setActive(i) {
+  var slides = feed.children, el = slides[i];
+  if (!el) return;
+  cur = i;
+  for (var j = 0; j < slides.length; j++) {
+    var v = slides[j].querySelector('video');
+    if (!v || j === i) continue;
+    slides[j].classList.remove('outro', 'paused', 'loading');
+    if (j === i + 1) {
+      v.pause();
+      if (!v.getAttribute('src')) { v.preload = 'auto'; v.src = v.getAttribute('data-src'); } // נטען מראש — המעבר אליו מיידי
+    } else release(v);
+  }
+  var video = el.querySelector('video');
+  activeVideo = video;
+  clearTimeout(watchTimer);
+  if (video) {
+    play(video);
+    watchTimer = setTimeout(function () { if (activeVideo === video) markWatched(video._f); }, 1500);
+  }
+  if (i >= shown - 2) more();
+}
+
+function onScroll() {
+  var h = feed.clientHeight; if (!h) return;
+  var i = Math.round(feed.scrollTop / h);
+  if (i !== cur) setActive(i);
+}
+feed.addEventListener('scroll', onScroll, { passive: true });
 
 function more() {
   var end = Math.min(list.length, shown + PAGE);
   for (; shown < end; shown++) feed.appendChild(slide(list[shown]));
   if (shown >= list.length && list.length && !feed.querySelector('.endslide')) {
     var e = document.createElement('div'); e.className = 'endslide';
-    e.innerHTML = '<h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'זהו להפעם') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים';
+    e.innerHTML = feedMode === 'liked' ? '<h2>זהו</h2>אלה כל הסרטונים שאהבת'
+      : '<h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'זהו להפעם') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים';
     feed.appendChild(e);
   }
 }
 
 function reload() {
-  activeVideo = null; clearTimeout(watchTimer);
-  Array.prototype.forEach.call(feed.querySelectorAll('video'), function (v) { v.pause(); v.removeAttribute('src'); v.load(); });
+  activeVideo = null; cur = -1; clearTimeout(watchTimer);
+  Array.prototype.forEach.call(feed.querySelectorAll('video'), release);
   feed.innerHTML = ''; feed.scrollTop = 0; shown = 0;
-  list = ALL.filter(function (v) { return (!source || v.s === source) && (feedMode !== 'unwatched' || !watched[v.f]); });
+  list = ALL.filter(function (v) {
+    return (!source || v.s === source) && (feedMode !== 'unwatched' || !watched[v.f]) && (feedMode !== 'liked' || liked[v.f]);
+  });
   if (!ALL.length) {
     feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין עדיין סרטונים</h2>חברו את הנגן למחשב שבו מותקנת התוכנה "VODOS לנגן", והסרטונים יועתקו אליו אוטומטית.</div>';
     return;
   }
   if (!list.length) {
-    feed.innerHTML = '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
+    feed.innerHTML = feedMode === 'liked'
+      ? '<div class="state"><h2>עוד לא סימנת "אהבתי"</h2>סרטון שתסמנו יישמר בנגן גם אחרי שצפיתם בו</div>'
+      : '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
     return;
   }
   more();
+  setActive(0);
 }
+
+// ---- הגדרות: כמה לשמור במחשב וכמה להעביר לנגן ----
+var sheet = document.getElementById('settings');
+function gb(x) { return (x < 1 ? x * 1000 + 'MB' : x + 'GB'); }
+function showSettings() {
+  document.getElementById('pcGB').textContent = gb(settings.pcGB);
+  document.getElementById('deviceGB').textContent = gb(settings.deviceGB);
+}
+document.getElementById('gear').addEventListener('click', function () { closeMenu(); showSettings(); sheet.hidden = false; });
+document.getElementById('settingsDone').addEventListener('click', function () { sheet.hidden = true; });
+sheet.addEventListener('click', function (e) {
+  if (e.target === sheet) { sheet.hidden = true; return; }
+  var b = e.target.closest('[data-k]'); if (!b) return;
+  var k = b.getAttribute('data-k'), i = GB_STEPS.indexOf(settings[k]);
+  if (i < 0) i = 2;
+  settings[k] = GB_STEPS[Math.max(0, Math.min(GB_STEPS.length - 1, i + +b.getAttribute('data-d')))];
+  set('vod_settings', settings); showSettings(); saveState(true);
+});
 
 // ---- מקורות ו"עדכני / לא נצפו" ----
 function buildMenu() {
@@ -264,11 +381,16 @@ function pollSync() {
 pill.addEventListener('click', function () { if (pill.classList.contains('ready')) location.reload(); });
 if (shownSync) { pollSync(); setInterval(pollSync, 1500); }
 
-window.vodosPause = function () { if (activeVideo) activeVideo.pause(); };
-window.vodosBack = function () { if (!menu.hidden) { closeMenu(); return true; } return false; };
+window.vodosPause = function () { if (activeVideo) activeVideo.pause(); if (saveTimer) saveState(true); };
+window.vodosBack = function () {
+  if (!sheet.hidden) { sheet.hidden = true; return true; }
+  if (!menu.hidden) { closeMenu(); return true; }
+  return false;
+};
 document.addEventListener('visibilitychange', function () { if (!document.hidden && activeVideo) play(activeVideo); });
 
 buildMenu(); showTab(); reload();
+saveState(); // שהמחשב יקבל את ההגדרות גם אם לא שינו כלום
 })();
 </script>
 </body>
