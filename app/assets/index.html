@@ -868,8 +868,9 @@ function describe(s) {
   if (s.finished && s.id !== loadedId) return { title: s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓', text: '', ready: true };
   return null;
 }
+var pressedStop = 0; // מתי לחצו "עצור" (עד שהאפליקציה מאשרת — כדי שהתגובה תהיה מיידית)
 function stopNote(s, d) {
-  if (d.stop && s.stopping) return 'עוצר את העדכון…';
+  if (d.stop && (s.stopping || Date.now() - pressedStop < 5000)) return 'עוצר… זה לוקח כמה שניות';
   if (d.stop && s.stopSlow) return 'המחשב לא עצר — אפשר פשוט לנתק את הכבל';
   return d.text || '';
 }
@@ -882,7 +883,8 @@ function pollSync() {
     if (d.pct != null) $('syncBar').style.width = d.pct + '%';
     if (d.busy) pill.classList.add('busy');
     if (d.ready || d.error) pill.classList.add('ready');
-    $('pillStop').hidden = !d.stop; $('pillStop').disabled = !!s.stopping; $('pillStop').textContent = s.stopping ? 'עוצר…' : 'עצור';
+    var halting = !!s.stopping || Date.now() - pressedStop < 5000;
+    $('pillStop').hidden = !d.stop; $('pillStop').disabled = halting; $('pillStop').textContent = halting ? 'עוצר…' : 'עצור';
     pill.classList.add('show');
   } else pill.classList.remove('show');
   $('syncBtn').classList.toggle('on', !!(d && d.stop));
@@ -896,11 +898,16 @@ function renderUpdate() {
   $('updText').textContent = d.title ? stopNote(s, d) : (hasBridge ? 'חברו את הנגן בכבל למחשב כדי לקבל סרטונים חדשים' : '');
   $('updTrack').hidden = !on; $('updTrack').classList.toggle('busy', !!d.busy);
   if (d.pct != null) $('updBar').style.width = d.pct + '%';
-  $('updStop').hidden = !on; $('updStop').disabled = !!s.stopping; $('updStop').textContent = s.stopping ? 'עוצר…' : 'עצור את העדכון';
+  var halting = !!s.stopping || Date.now() - pressedStop < 5000;
+  $('updStop').hidden = !on; $('updStop').disabled = halting; $('updStop').textContent = halting ? 'עוצר… זה לוקח כמה שניות' : 'עצור את העדכון';
   $('updLast').textContent = idx.created ? 'עדכון אחרון: ' + ago(idx.created) + ' · ' + ALL.length + ' סרטונים בנגן' : '';
 }
 function openUpdate() { if (hasBridge) lastS = syncStatus(); renderUpdate(); openSheet(upd); }
-function stopSync() { if (window.VODOS && VODOS.stopSync) { VODOS.stopSync(); toast('עוצר את העדכון…'); setTimeout(pollSync, 300); } }
+function stopSync() {
+  if (!window.VODOS || !VODOS.stopSync) return;
+  VODOS.stopSync(); pressedStop = Date.now();
+  pollSync(); setTimeout(pollSync, 400);
+}
 $('syncBtn').addEventListener('click', openUpdate);
 $('updClose').addEventListener('click', function () { closeSheet(upd); });
 upd.addEventListener('click', function (e) { if (e.target === upd) closeSheet(upd); });

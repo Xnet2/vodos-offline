@@ -235,12 +235,14 @@ switch ($Action) {
       $size = (Get-Item -LiteralPath $path).Length
       $folder.CopyHere($path, 4 + 16 + 1024)  # בלי חלון התקדמות, "כן לכל", בלי חלונות שגיאה
       # ההעתקה רצה ברקע — מחכים שהקובץ יופיע בנגן (אחרת סגירת התהליך עוצרת אותה)
-      $deadline = (Get-Date).AddSeconds(30 + $size / 1MB * 3)
+      $deadline = (Get-Date).AddSeconds(30 + $size / 1MB * 3); $nextStop = (Get-Date).AddSeconds(2)
       while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 400
         $it = $folder.ParseName($n)
         if (-not $it) { $it = Get-Child $folder $n }
         if ($it -and [double]$it.ExtendedProperty('System.Size') -ge $size) { return $true }
+        # גם באמצע קובץ גדול — כל 2 שניות בודקים אם ביקשו לעצור, כדי לא להתחיל את הבא
+        if ((Get-Date) -gt $nextStop) { $nextStop = (Get-Date).AddSeconds(2); if (Test-Stop) { $script:StopHit = $true; return $false } }
       }
       return $false
     }
@@ -253,11 +255,11 @@ switch ($Action) {
       [void](Copy-One $sync)
       Remove-Item -LiteralPath (Join-Path $Local $sync) -ErrorAction SilentlyContinue
     }
-    $done = 0
+    $done = 0; $script:StopHit = $false
     foreach ($n in $names) {
       if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
       # לפני כל קובץ: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
-      if (Test-Stop) { Out-Json @{ stopped = $true; copied = $done }; return }
+      if ($script:StopHit -or (Test-Stop)) { Out-Json @{ stopped = $true; copied = $done }; return }
       $ok = Copy-One $n
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }
