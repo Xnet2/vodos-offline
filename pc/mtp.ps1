@@ -13,7 +13,7 @@ param(
   [string]$Target = 'Android\data\il.vodos.offline\files',
   [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
   [string]$Avoid = '',    # אחסון שנכשל בחיבור הזה — לא לנסות שוב
-  [string]$Known = ''     # בקשות עצירה ישנות (stop-*.txt, מופרדות ב-|) — לא להתייחס אליהן
+  [string]$Session = ''   # מזהה החיבור הנוכחי — בקשת עצירה מהאפליקציה היא הקובץ stop-<מזהה>.txt
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Console]::InputEncoding = [Text.Encoding]::UTF8
@@ -102,10 +102,14 @@ function Get-AppFolder {
   return $null
 }
 
-# בקשות עצירה מהאפליקציה (stop-*.txt) שלא היו ברשימה $Known (אלה שכבר היו שם כשהחיבור התחיל)
-function Get-NewStops($folder) {
-  $known = @($Known -split '\|')
-  return @($folder.Items() | ForEach-Object { [string]$_.Name } | Where-Object { $_ -like 'stop-*' -and $known -notcontains $_ })
+# האם ביקשו בנגן לעצור את החיבור הזה: הקובץ stop-<מזהה החיבור>.txt (חיפוש ישיר לפי שם, בתיקייה טרייה)
+function Test-Stop {
+  if (-not $Session) { return $false }
+  $folder = Get-AppFolder
+  if (-not $folder) { return $false }
+  $n = "stop-$Session.txt"
+  $i = $folder.ParseName($n)
+  return [bool]($i -and $i.Name -eq $n)
 }
 
 function Invoke-Action {
@@ -146,9 +150,7 @@ switch ($Action) {
 
   # האם ביקשו בנגן לעצור את העדכון
   'stopcheck' {
-    $folder = Get-AppFolder
-    if (-not $folder) { Out-Json @{ error = 'not connected' }; return }
-    Out-Json @{ stops = @(Get-NewStops $folder) }
+    Out-Json @{ stop = (Test-Stop) }
   }
 
   # קובץ אחד מהנגן למחשב (למשל applog.txt — היומן של האפליקציה), מודפס כטקסט
@@ -246,7 +248,7 @@ switch ($Action) {
     # קודם רשימת הקבצים שעומדים להגיע (sync-*.json) — ממנה האפליקציה בנגן מציגה את ההתקדמות
     if ($names.Count) {
       $sync = 'sync-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + '.json'
-      $json = @{ total = $names.Count; files = $names } | ConvertTo-Json -Compress
+      $json = @{ total = $names.Count; files = $names; session = $Session } | ConvertTo-Json -Compress
       [IO.File]::WriteAllText((Join-Path $Local $sync), $json, (New-Object Text.UTF8Encoding $false))
       [void](Copy-One $sync)
       Remove-Item -LiteralPath (Join-Path $Local $sync) -ErrorAction SilentlyContinue
@@ -255,7 +257,7 @@ switch ($Action) {
     foreach ($n in $names) {
       if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
       # לפני כל קובץ: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
-      if ((Get-NewStops $(if ($Storage) { Get-AppFolder } else { $folder })).Count) { Out-Json @{ stopped = $true; copied = $done }; return }
+      if (Test-Stop) { Out-Json @{ stopped = $true; copied = $done }; return }
       $ok = Copy-One $n
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }
@@ -274,7 +276,7 @@ if ($Action -eq 'serve') {
     if (-not $line.Trim()) { continue }
     $req = $line | ConvertFrom-Json
     $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
-    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid; $Known = [string]$req.known
+    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid; $Session = [string]$req.session
     try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
     Out-Json @{ end = $req.id }
   }

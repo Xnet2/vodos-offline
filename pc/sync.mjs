@@ -74,7 +74,7 @@ const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60
 // האחסון בנגן שבו נמצאים הסרטונים (נשמר רק כשבאמת היה בו index — כדי לא "להינעל" על הזיכרון הפנימי)
 let storagePref = loadJSON('storage2.json', {}).name || '';
 let avoid = '';                                           // אחסון שנתקע בחיבור הזה
-let knownStops = [];       // בקשות עצירה (stop-*.txt) שכבר היו בנגן כשהחיבור התחיל
+let session = '';          // מזהה החיבור הנוכחי (נשלח בהודעות לנגן; העצירה מתייחסת אליו)
 let stopRequested = false; // ביקשו בנגן לעצור את העדכון — מפסיקים להוריד ולהעתיק
 
 // mtp.ps1 רץ כתהליך PowerShell אחד שנשאר פתוח (mtp.ps1 serve) — הפעלה של PowerShell לוקחת כמה שניות,
@@ -102,7 +102,7 @@ function getWorker() {
 function ps(args, onLine) {
   const run = () => new Promise((resolve) => {
     const w = getWorker(), id = ++seq, lines = [];
-    const req = { id, action: args[0], storage: storagePref, avoid, known: knownStops.join('|') };
+    const req = { id, action: args[0], storage: storagePref, avoid, session };
     for (let i = 1; i < args.length; i += 2) req[args[i].slice(1).toLowerCase()] = args[i + 1];
     const timer = setTimeout(() => {
       lines.push({ timeout: true });
@@ -271,7 +271,7 @@ function refresh() {
 const STATUS_DIR = join(HOME, 'status');
 let statusBusy = null, statusNext = null;
 function status(title, text, extra = {}) {
-  statusNext = { title, text, ...extra };
+  statusNext = { title, text, session, ...extra };
   if (!statusBusy) statusBusy = (async () => {
     while (statusNext) {
       const s = statusNext; statusNext = null;
@@ -401,9 +401,20 @@ async function push(free, have) {
 
 async function syncDevice(dev) {
   const KEEP = ' · אל תנתקו את הנגן';
-  avoid = ''; knownStops = []; stopRequested = false;
+  avoid = ''; stopRequested = false;
+  session = Date.now().toString(36); // מזהה החיבור — נשלח בכל הודעה; עצירה בנגן נכתבת כ-stop-<מזהה>.txt
   status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
-  let last = 0, stopTimer = null;
+  let last = 0, stopTimer = null, checking = null;
+  // בדיקה אחת אם ביקשו בנגן לעצור (בדיקות לא חופפות: אם יש אחת באוויר — מחכים לה)
+  const checkStop = () => {
+    if (stopRequested) return Promise.resolve(true);
+    if (!checking) checking = ps(['stopcheck']).then(([r]) => {
+      checking = null;
+      if (r && r.stop && !stopRequested) { stopRequested = true; log('ביקשו בנגן לעצור'); status('עוצר את העדכון…', 'עוד רגע'); }
+      return stopRequested;
+    });
+    return checking;
+  };
   onDownload = (n) => {
     if (Date.now() - last < 8000) return; // לא להציף את הנגן בהודעות
     last = Date.now();
@@ -417,33 +428,24 @@ async function syncDevice(dev) {
     const [st] = await ps(['state', '-Local', tmp]);
     if (st && st.error) throw new Error(st.error);
     if (st && st.timeout) throw new Error('קריאה מהנגן נתקעה');
-    knownStops = (st.have || []).filter(n => n.startsWith('stop-'));
     if (st.hasIndex && st.storage !== storagePref) { storagePref = st.storage; saveJSON('storage2.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
     const changed = st && st.state ? applyState(st.state) : false;
-    // בזמן ההורדה — כל 5 שניות בודקים אם ביקשו בנגן לעצור
-    let checking = false;
-    stopTimer = setInterval(async () => {
-      if (stopRequested || checking) return;
-      checking = true;
-      const [r] = await ps(['stopcheck']);
-      checking = false;
-      if (r && r.stops && r.stops.length) { stopRequested = true; log('ביקשו בנגן לעצור'); status('עוצר את העדכון…', 'עוד רגע'); }
-    }, 5000);
-    // אם ביקשו לעצור עוד לפני שהגענו לכאן (קריאת המצב מהנגן יכולה לקחת זמן)
-    const [early] = await ps(['stopcheck']);
-    if (early && early.stops && early.stops.length) { stopRequested = true; log('ביקשו בנגן לעצור'); }
-    if (refreshing && !stopRequested) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
-    if (!stopRequested) await refresh();
+    // עצירה נבדקת: עכשיו, כל 5 שניות בזמן ההורדה, לפני ההעתקה, ולפני כל קובץ בהעתקה (ב-mtp.ps1)
+    if (await checkStop()) { stoppedMsg(); return; }
+    stopTimer = setInterval(checkStop, 5000);
+    if (refreshing) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
+    await refresh();
     if ((changed || !selection) && !stopRequested) await refresh(); // הנפח במחשב השתנה — לבחור מחדש
     clearInterval(stopTimer);
     onDownload = null;
-    if (stopRequested) { stoppedMsg(); return; }
+    if (await checkStop()) { stoppedMsg(); return; }
     if (!selection) {
       status('לא הצלחתי להוריד סרטונים', 'בדקו שיש אינטרנט במחשב, ונסו לחבר שוב', { error: true });
       return;
     }
     status('מכין את ההעתקה לנגן…', (refreshError ? 'אין אינטרנט במחשב — מעתיק את מה שכבר הורד' : 'עוד רגע מתחילים') + KEEP);
     await statusFlush();
+    if (await checkStop()) { stoppedMsg(); return; }
     log(`אחסון: ${st.storage}, פנוי ${((st.free || 0) / GB).toFixed(1)}GB`);
     await push(st.free || 0, st.have || []); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
     if (stopRequested) stoppedMsg();
@@ -452,6 +454,7 @@ async function syncDevice(dev) {
     status('ההעתקה נכשלה', 'נתקו וחברו שוב את הנגן', { error: true });
   } finally {
     clearInterval(stopTimer);
+    if (checking) await checking;
     onDownload = null;
     await statusFlush();
     stopRequested = false;

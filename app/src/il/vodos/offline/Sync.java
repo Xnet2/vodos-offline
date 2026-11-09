@@ -27,6 +27,7 @@ final class Sync {
     // הודעת מצב מהמחשב לפני ההעתקה (status-*.json): "הנגן מחובר", "המחשב מוריד…", או שגיאה
     boolean msg, error, stopping, stopSlow;
     String title = "", text = "";
+    String session = ""; // מזהה החיבור למחשב (מההודעות שלו) — העצירה מתייחסת רק אליו
 
     String json() {
       return "{\"active\":" + active + ",\"finished\":" + finished + ",\"done\":" + done + ",\"total\":" + total
@@ -54,25 +55,30 @@ final class Sync {
     // מנותק מהמחשב — שום העתקה לא פעילה
     if (!charging(ctx)) s.active = false;
     s.stalled = !s.finished && !s.active && !s.msg;
-    // ביקשו לעצור בשלוש הדקות האחרונות, והמחשב עוד לא אישר — "עוצר…"
-    long stopAt = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("stopAt", 0), since = System.currentTimeMillis() - stopAt;
-    s.stopping = s.active && since < 45000;
-    s.stopSlow = s.active && since >= 45000 && since < 300000; // המחשב לא הגיב — אפשר פשוט לנתק
+    // "עוצר…" — רק אם לחצו "עצור" בחיבור הזה (לפי המזהה שלו), והמחשב עוד לא אישר
+    android.content.SharedPreferences p = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
+    boolean mine = s.active && !s.session.isEmpty() && s.session.equals(p.getString("stopSession", ""));
+    long since = System.currentTimeMillis() - p.getLong("stopAt", 0);
+    s.stopping = mine && since < 45000;
+    s.stopSlow = mine && since >= 45000; // המחשב לא הגיב — אפשר פשוט לנתק
     return s;
   }
 
-  // בקשה מהמחשב להפסיק: קובץ stop-<זמן>.txt בתיקייה של האפליקציה. המחשב בודק אם הופיע קובץ כזה
-  // תוך כדי ההורדה וההעתקה, ועוצר (הסרטונים שכבר הגיעו נשארים)
+  // בקשה מהמחשב להפסיק את החיבור הנוכחי: הקובץ stop-<מזהה החיבור>.txt בתיקייה של האפליקציה.
+  // המחשב מחפש בדיוק את השם הזה לאורך כל העדכון, ועוצר (הסרטונים שכבר הגיעו נשארים)
   static void requestStop(final Context ctx) {
-    ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).edit().putLong("stopAt", System.currentTimeMillis()).apply();
     new Thread(() -> {
+      String session = readFiles(ctx).session;
+      if (session.isEmpty()) { log(ctx, "stop: no session"); return; }
+      ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).edit()
+          .putString("stopSession", session).putLong("stopAt", System.currentTimeMillis()).apply();
       for (File dir : ctx.getExternalFilesDirs(null)) {
         if (dir == null) continue;
-        File f = new File(dir, "stop-" + System.currentTimeMillis() + ".txt");
+        File f = new File(dir, "stop-" + session + ".txt");
         try { new java.io.FileOutputStream(f).close(); } catch (Exception e) { continue; }
         android.media.MediaScannerConnection.scanFile(ctx, new String[] { f.getPath() }, null, null);
       }
-      log(ctx, "stop requested");
+      log(ctx, "stop requested: " + session);
     }).start();
   }
 
@@ -87,6 +93,7 @@ final class Sync {
         s.id = stamp(st);
         s.title = o.optString("title");
         s.text = o.optString("text");
+        s.session = o.optString("session");
         long a = age(st.getName(), st.lastModified());
         s.error = o.optBoolean("error") && a < 600000; // שגיאה ישנה כבר לא מעניינת
         // אם כבר 3 דקות אין הודעה חדשה — התוכנה במחשב נעצרה או שהנגן נותק
@@ -100,7 +107,9 @@ final class Sync {
     s.id = stamp(sync);
     long newest = sync.lastModified();
     try {
-      JSONArray files = new JSONObject(read(sync)).getJSONArray("files");
+      JSONObject so = new JSONObject(read(sync));
+      s.session = so.optString("session");
+      JSONArray files = so.getJSONArray("files");
       s.total = files.length();
       for (int i = 0; i < files.length(); i++) {
         String n = files.getString(i);
