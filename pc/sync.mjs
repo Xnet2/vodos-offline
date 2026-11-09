@@ -69,16 +69,28 @@ function applyState(text) {
 }
 
 // מריץ את mtp.ps1; כל שורת JSON שהוא מדפיס מגיעה ל-onLine מיד (להתקדמות), וכולן חוזרות בסוף
+// העתקה לאחסון שאסור לכתוב אליו (למשל הזיכרון הפנימי באנדרואיד 11+) יכולה להיתקע לתמיד — לכן לכל פעולה יש זמן מקסימלי
+const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60e3 };
+let storagePref = loadJSON('storage.json', {}).name || ''; // האחסון בנגן שעבד בפעם הקודמת
+let avoid = '';                                           // אחסון שנתקע בחיבור הזה
+
 function ps(args, onLine) {
   return new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, 'mtp.ps1'), ...args], { windowsHide: true });
+    const extra = [...(storagePref ? ['-Storage', storagePref] : []), ...(avoid ? ['-Avoid', avoid] : [])];
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, 'mtp.ps1'), ...args, ...extra], { windowsHide: true });
     const lines = [];
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, TIMEOUT[args[0]] || 120e3);
     createInterface({ input: child.stdout }).on('line', (l) => {
       let o; try { o = JSON.parse(l); } catch { return; }
       lines.push(o); if (onLine) onLine(o);
     });
-    child.on('error', reject);
-    child.on('close', (code) => { if (code && !lines.length) reject(new Error('mtp.ps1 exit ' + code)); else resolve(lines); });
+    child.on('error', (e) => { clearTimeout(timer); reject(e); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) { lines.push({ timeout: true }); return resolve(lines); }
+      if (code && !lines.length) reject(new Error('mtp.ps1 exit ' + code)); else resolve(lines);
+    });
   });
 }
 
@@ -244,8 +256,21 @@ function status(title, text, extra = {}) {
         for (const f of readdirSync(STATUS_DIR)) rm(join(STATUS_DIR, f));
         const name = 'status-' + Date.now() + '.json';
         writeFileSync(join(STATUS_DIR, name), JSON.stringify(s));
-        await ps(['put', '-Local', STATUS_DIR, '-List', name]);
-      } catch {}
+        // עד שני ניסיונות: אם נתקע באחסון אחד — בפעם השנייה מדלגים עליו
+        for (let i = 0; i < 2; i++) {
+          const out = await ps(['put', '-Local', STATUS_DIR, '-List', name]);
+          const ok = out.find(o => o.ok);
+          if (ok) {
+            if (ok.storage && ok.storage !== storagePref) { storagePref = ok.storage; saveJSON('storage.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
+            break;
+          }
+          const tried = out.filter(o => o.trying).pop();
+          if (!tried) break;
+          avoid = tried.trying;
+          if (storagePref === avoid) storagePref = '';
+          log('לא הצלחתי לכתוב ל-' + avoid + (out.some(o => o.timeout) ? ' (נתקע)' : '') + ' — מנסה אחסון אחר');
+        }
+      } catch (e) { log('הודעת מצב לא נשלחה:', e.message); }
     }
     statusBusy = null;
   })();
@@ -343,6 +368,7 @@ async function push(free, have) {
   const out = await ps(['push', '-Local', CACHE, '-List', list]);
   const err = out.find(o => o.error);
   if (err) throw new Error(err.error);
+  if (out.some(o => o.timeout)) throw new Error('ההעתקה נתקעה');
   const copied = out.filter(o => o.file && o.ok && /\.(mp4|mov|m4v|webm)$/.test(o.file)).length;
   const bad = out.filter(o => o.file && !o.ok).length;
   log(`הועתקו ${copied} סרטונים חדשים` + (bad ? `, ${bad} נכשלו` : ''));
@@ -350,6 +376,7 @@ async function push(free, have) {
 
 async function syncDevice(dev) {
   const KEEP = ' · אל תנתקו את הנגן';
+  avoid = '';
   status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
   let last = 0;
   onDownload = (n) => {
@@ -363,6 +390,7 @@ async function syncDevice(dev) {
     await statusFlush();
     const [st] = await ps(['state', '-Local', tmp]);
     if (st && st.error) throw new Error(st.error);
+    if (st && st.timeout) throw new Error('קריאה מהנגן נתקעה');
     const changed = st && st.state ? applyState(st.state) : false;
     if (refreshing) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
     await refresh();

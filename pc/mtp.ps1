@@ -8,7 +8,9 @@ param(
   [string]$Device = '',
   [string]$Local,
   [string]$List,
-  [string]$Target = 'Android\data\il.vodos.offline\files'
+  [string]$Target = 'Android\data\il.vodos.offline\files',
+  [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
+  [string]$Avoid = ''     # אחסון שנכשל בחיבור הזה — לא לנסות שוב
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
@@ -32,30 +34,35 @@ function Get-Path($folder, $path) {
 # מחפש בכל המכשירים הניידים המחוברים (נגן, טלפון…) אחסון שיש בו את התיקייה של אפליקציית VODOS
 # (האפליקציה יוצרת אותה בפתיחה הראשונה). אם יש כמה — זה שכבר יש בו סרטונים, ואחרת זה עם הכי הרבה מקום פנוי.
 # -Device <שם> מגביל למכשיר מסוים.
-function Get-Storage {
+# כל האחסונים שיש בהם את התיקייה של האפליקציה, מהמועדף: זה שעבד בפעם הקודמת (-Storage), אחר כך זה שכבר יש בו
+# סרטונים, ואחר כך הכי הרבה מקום. (בזיכרון הפנימי של אנדרואיד 11+ אסור למחשב לכתוב לתיקייה של אפליקציה,
+# ומיד אחרי החיבור הרשימה בכרטיס לפעמים עוד לא נטענה — לכן לא סומכים רק על "יש בו סרטונים".)
+function Get-Storages {
   $sh = New-Object -ComObject Shell.Application
-  $best = $null; $bestScore = -1
+  $list = @()
   foreach ($dev in $sh.Namespace(17).Items()) {
     if ($dev.IsFileSystem -or ($Device -and $dev.Name -ne $Device)) { continue }  # כוננים רגילים (C: וכו') לא מעניינים
     foreach ($s in @($dev.GetFolder.Items())) {
-      if (-not $s.IsFolder) { continue }
+      if (-not $s.IsFolder -or ($Avoid -and $s.Name -eq $Avoid)) { continue }
       $app = Get-Path $s.GetFolder $Target.Substring(0, $Target.LastIndexOf('\'))
       if (-not $app) { continue }
       $score = [double]$s.ExtendedProperty('System.FreeSpace')
       $files = Get-Child $app 'files'
       if ($files -and (@($files.GetFolder.Items()) | Where-Object { $_.Name -like 'index-*.json' })) { $score += 1e15 }
-      if ($score -gt $bestScore) { $best = $s; $bestScore = $score }
+      if ($Storage -and $s.Name -eq $Storage) { $score += 2e15 }
+      $list += [pscustomobject]@{ Item = $s; Score = $score }
     }
   }
-  return $best
+  return @($list | Sort-Object Score -Descending | ForEach-Object { $_.Item })
 }
+function Get-Storage { return (Get-Storages | Select-Object -First 1) }
 
 switch ($Action) {
   'find' {
     $s = Get-Storage
     if (-not $s) { Out-Json @{ connected = $false }; break }
     $free = $s.ExtendedProperty('System.FreeSpace')
-    Out-Json @{ connected = $true; storage = $s.Name; free = [double]$free }
+    Out-Json @{ connected = $true; storage = $s.Name; free = [double]$free; all = @(Get-Storages | ForEach-Object { $_.Name }) }
   }
 
   # מה כבר יש בנגן, וקובץ ה-state האחרון של האפליקציה (אהבתי / נצפו / הגדרות) — מועתק ל-<Local> ונקרא משם
@@ -98,16 +105,21 @@ switch ($Action) {
   }
 
   # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
+  # בודק גם שהקובץ באמת הגיע — ואם לא, מנסה באחסון הבא. מחזיר את האחסון שעבד
   'put' {
-    $s = Get-Storage
-    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
-    $folder = Get-Path $s.GetFolder $Target
-    if (-not $folder) { Out-Json @{ error = 'no app folder' }; exit 1 }
+    $all = Get-Storages
+    if (-not $all.Count) { Out-Json @{ error = 'not connected' }; exit 1 }
     $path = Join-Path $Local $List
-    $folder.CopyHere($path, 4 + 16 + 1024)
-    $deadline = (Get-Date).AddSeconds(15)
-    while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
-    Out-Json @{ ok = [bool]$folder.ParseName($List) }
+    foreach ($s in $all) {
+      $folder = Get-Path $s.GetFolder $Target
+      if (-not $folder) { continue }
+      Out-Json @{ trying = $s.Name }
+      $folder.CopyHere($path, 4 + 16 + 1024)
+      $deadline = (Get-Date).AddSeconds(12)
+      while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
+      if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; exit 0 }
+    }
+    Out-Json @{ ok = $false }
   }
 
   'push' {
