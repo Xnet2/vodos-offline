@@ -3,6 +3,8 @@
 #   mtp.ps1 state  -Local <תיקייה>              → אילו קבצים כבר בנגן, ומה כתוב ב-state האחרון של האפליקציה
 #   mtp.ps1 put    -Local <תיקייה> -List <שם>    → מעתיק לנגן קובץ אחד (הודעת מצב)
 #   mtp.ps1 push   -Local <תיקייה> -List <קובץ>  → מעתיק לנגן את הקבצים שברשימה ועוד לא נמצאים בו
+#   mtp.ps1 serve                               → נשאר פתוח ומקבל פקודות (שורת JSON לכל פקודה) — הפעלה של
+#                                                 PowerShell לוקחת כמה שניות, אז התוכנה לא מפעילה אותו מחדש בכל פעם
 param(
   [Parameter(Position = 0)][string]$Action,
   [string]$Device = '',
@@ -13,11 +15,13 @@ param(
   [string]$Avoid = ''     # אחסון שנכשל בחיבור הזה — לא לנסות שוב
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+[Console]::InputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
 function Out-Json($o) { [Console]::Out.WriteLine(($o | ConvertTo-Json -Compress -Depth 4)); [Console]::Out.Flush() }
 
 function Get-Child($folder, $name) {
+  try { $i = $folder.ParseName($name); if ($i) { return $i } } catch {}  # ישירות לפי שם — הרבה יותר מהיר מלעבור על כל התיקייה
   foreach ($i in $folder.Items()) { if ($i.Name -eq $name) { return $i } }
   return $null
 }
@@ -31,8 +35,6 @@ function Get-Path($folder, $path) {
   return $folder
 }
 
-# מחפש בכל המכשירים הניידים המחוברים (נגן, טלפון…) אחסון שיש בו את התיקייה של אפליקציית VODOS
-# (האפליקציה יוצרת אותה בפתיחה הראשונה). אם יש כמה — זה שכבר יש בו סרטונים, ואחרת זה עם הכי הרבה מקום פנוי.
 # -Device <שם> מגביל למכשיר מסוים.
 # כל האחסונים שיש בהם את התיקייה של האפליקציה, מהמועדף: זה שעבד בפעם הקודמת (-Storage), אחר כך זה שכבר יש בו
 # סרטונים, ואחר כך הכי הרבה מקום. (בזיכרון הפנימי של אנדרואיד 11+ אסור למחשב לכתוב לתיקייה של אפליקציה,
@@ -57,18 +59,23 @@ function Get-Storages {
 }
 function Get-Storage { return (Get-Storages | Select-Object -First 1) }
 
+function Invoke-Action {
 switch ($Action) {
+  # בדיקה מהירה (שנייה): האם מחובר מכשיר נייד עם אחסון. החיפוש של תיקיית האפליקציה איטי — הוא נעשה רק אחרי
+  # שכבר נשלחה לנגן ההודעה "מחובר"
   'find' {
-    $s = Get-Storage
-    if (-not $s) { Out-Json @{ connected = $false }; break }
-    $free = $s.ExtendedProperty('System.FreeSpace')
-    Out-Json @{ connected = $true; storage = $s.Name; free = [double]$free; all = @(Get-Storages | ForEach-Object { $_.Name }) }
+    $sh = New-Object -ComObject Shell.Application
+    foreach ($dev in $sh.Namespace(17).Items()) {
+      if ($dev.IsFileSystem -or ($Device -and $dev.Name -ne $Device)) { continue }
+      if (@($dev.GetFolder.Items() | Where-Object { $_.IsFolder }).Count) { Out-Json @{ connected = $true; device = $dev.Name }; return }
+    }
+    Out-Json @{ connected = $false }
   }
 
   # מה כבר יש בנגן, וקובץ ה-state האחרון של האפליקציה (אהבתי / נצפו / הגדרות) — מועתק ל-<Local> ונקרא משם
   'state' {
     $s = Get-Storage
-    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    if (-not $s) { Out-Json @{ error = 'not connected' }; return }
     $folder = Get-Path $s.GetFolder $Target
     if (-not $folder) { Out-Json @{ have = @(); state = $null }; break }
     $items = @($folder.Items())
@@ -85,16 +92,16 @@ switch ($Action) {
       try { $text = [IO.File]::ReadAllText($dest, [Text.Encoding]::UTF8); Remove-Item -LiteralPath $dest } catch { $text = $null }
       if ($text) { break }
     }
-    Out-Json @{ have = $have; state = $text }
+    Out-Json @{ have = $have; state = $text; storage = $s.Name; free = [double]$s.ExtendedProperty('System.FreeSpace') }
   }
 
   # קובץ אחד מהנגן למחשב (למשל applog.txt — היומן של האפליקציה), מודפס כטקסט
   'pull' {
     $s = Get-Storage
-    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    if (-not $s) { Out-Json @{ error = 'not connected' }; return }
     $folder = Get-Path $s.GetFolder $Target
     $item = if ($folder) { $folder.ParseName($List) } else { $null }
-    if (-not $item) { Out-Json @{ error = 'not found' }; exit 1 }
+    if (-not $item) { Out-Json @{ error = 'not found' }; return }
     $dest = Join-Path $Local $List
     Remove-Item -LiteralPath $dest -ErrorAction SilentlyContinue
     (New-Object -ComObject Shell.Application).Namespace($Local).CopyHere($item, 4 + 16 + 1024)
@@ -107,8 +114,18 @@ switch ($Action) {
   # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
   # בודק גם שהקובץ באמת הגיע — ואם לא, מנסה באחסון הבא. מחזיר את האחסון שעבד
   'put' {
-    $all = Get-Storages
-    if (-not $all.Count) { Out-Json @{ error = 'not connected' }; exit 1 }
+    # קודם ישר לאחסון שעבד בפעם הקודמת (מהיר); רק אם אין — סריקה מלאה של כל האחסונים
+    $all = @()
+    if ($Storage -and $Storage -ne $Avoid) {
+      $sh = New-Object -ComObject Shell.Application
+      foreach ($dev in $sh.Namespace(17).Items()) {
+        if ($dev.IsFileSystem) { continue }
+        $s = Get-Child $dev.GetFolder $Storage
+        if ($s) { $all = @($s); break }
+      }
+    }
+    if (-not $all.Count) { $all = Get-Storages }
+    if (-not $all.Count) { Out-Json @{ error = 'not connected' }; return }
     $path = Join-Path $Local $List
     foreach ($s in $all) {
       $folder = Get-Path $s.GetFolder $Target
@@ -117,19 +134,31 @@ switch ($Action) {
       $folder.CopyHere($path, 4 + 16 + 1024)
       $deadline = (Get-Date).AddSeconds(12)
       while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
-      if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; exit 0 }
+      if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; return }
+    }
+    # האחסון המועדף לא עבד — סריקה מלאה של השאר
+    if ($Storage) {
+      foreach ($s in (Get-Storages | Where-Object { $_.Name -ne $Storage })) {
+        $folder = Get-Path $s.GetFolder $Target
+        if (-not $folder) { continue }
+        Out-Json @{ trying = $s.Name }
+        $folder.CopyHere($path, 4 + 16 + 1024)
+        $deadline = (Get-Date).AddSeconds(12)
+        while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
+        if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; return }
+      }
     }
     Out-Json @{ ok = $false }
   }
 
   'push' {
     $s = Get-Storage
-    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    if (-not $s) { Out-Json @{ error = 'not connected' }; return }
     $folder = $s.GetFolder
     foreach ($part in $Target.Split('\')) {  # תיקיית האפליקציה כבר קיימת; כאן נוצרת רק files אם חסרה
       $child = Get-Child $folder $part
       if (-not $child) { $folder.NewFolder($part); Start-Sleep -Milliseconds 700; $child = Get-Child $folder $part }
-      if (-not $child) { Out-Json @{ error = "cannot create $part" }; exit 1 }
+      if (-not $child) { Out-Json @{ error = "cannot create $part" }; return }
       $folder = $child.GetFolder
     }
     $have = @{}
@@ -172,5 +201,20 @@ switch ($Action) {
   }
 
 
-  default { Write-Error "unknown action: $Action"; exit 2 }
+  default { Out-Json @{ error = "unknown action: $Action" } }
+}
+}
+
+if ($Action -eq 'serve') {
+  # כל שורה: {"id":1,"action":"put","local":"…","list":"…","storage":"…","avoid":"…"}; בסוף כל פקודה: {"end":1}
+  while ($null -ne ($line = [Console]::In.ReadLine())) {
+    if (-not $line.Trim()) { continue }
+    $req = $line | ConvertFrom-Json
+    $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
+    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid
+    try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
+    Out-Json @{ end = $req.id }
+  }
+} else {
+  Invoke-Action
 }

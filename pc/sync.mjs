@@ -19,7 +19,7 @@ import { pipeline } from 'node:stream/promises';
 const GB = 1024 ** 3;
 const KEEP_FREE = 500 * 1024 ** 2;   // להשאיר לפחות 500MB פנויים בנגן
 const REFRESH_MS = 15 * 60 * 1000;   // כל כמה זמן לבדוק סרטונים חדשים
-const POLL_MS = 8000;                // כל כמה זמן לבדוק אם הנגן חובר
+const POLL_MS = 3000;                // כל כמה זמן לבדוק אם הנגן חובר (בדיקה מהירה)
 const SITE = 'https://xnet2.github.io/VOD/';
 
 setDefaultResultOrder('ipv4first'); // דרך נטפרי חלק מהאתרים לא עונים ב-IPv6
@@ -74,24 +74,45 @@ const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60
 let storagePref = loadJSON('storage.json', {}).name || ''; // האחסון בנגן שעבד בפעם הקודמת
 let avoid = '';                                           // אחסון שנתקע בחיבור הזה
 
-function ps(args, onLine) {
-  return new Promise((resolve, reject) => {
-    const extra = [...(storagePref ? ['-Storage', storagePref] : []), ...(avoid ? ['-Avoid', avoid] : [])];
-    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, 'mtp.ps1'), ...args, ...extra], { windowsHide: true });
-    const lines = [];
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, TIMEOUT[args[0]] || 120e3);
-    createInterface({ input: child.stdout }).on('line', (l) => {
-      let o; try { o = JSON.parse(l); } catch { return; }
-      lines.push(o); if (onLine) onLine(o);
-    });
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (timedOut) { lines.push({ timeout: true }); return resolve(lines); }
-      if (code && !lines.length) reject(new Error('mtp.ps1 exit ' + code)); else resolve(lines);
-    });
+// mtp.ps1 רץ כתהליך PowerShell אחד שנשאר פתוח (mtp.ps1 serve) — הפעלה של PowerShell לוקחת כמה שניות,
+// ובלי זה כל בדיקה "האם הנגן חובר" עלתה בזה. הפקודות נשלחות אליו אחת אחרי השנייה; אם פקודה נתקעת — התהליך
+// נסגר ונפתח חדש בפקודה הבאה.
+let worker = null, seq = 0, queue = Promise.resolve();
+
+function getWorker() {
+  if (worker) return worker;
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, 'mtp.ps1'), 'serve'], { windowsHide: true });
+  const w = { child, pending: null };
+  createInterface({ input: child.stdout }).on('line', (l) => {
+    let o; try { o = JSON.parse(l); } catch { return; }
+    const p = w.pending; if (!p) return;
+    if (o.end === p.id) p.finish();
+    else { p.lines.push(o); if (p.onLine) p.onLine(o); }
   });
+  child.on('error', () => {});
+  child.on('close', () => { if (worker === w) worker = null; if (w.pending) w.pending.finish({ error: 'mtp.ps1 נסגר' }); });
+  worker = w;
+  return w;
+}
+
+// args: ['put', '-Local', dir, '-List', name] → כל שורות ה-JSON שהפקודה הדפיסה
+function ps(args, onLine) {
+  const run = () => new Promise((resolve) => {
+    const w = getWorker(), id = ++seq, lines = [];
+    const req = { id, action: args[0], storage: storagePref, avoid };
+    for (let i = 1; i < args.length; i += 2) req[args[i].slice(1).toLowerCase()] = args[i + 1];
+    const timer = setTimeout(() => {
+      lines.push({ timeout: true });
+      w.pending = null; if (worker === w) worker = null;
+      try { w.child.kill(); } catch {}
+      resolve(lines);
+    }, TIMEOUT[args[0]] || 120e3);
+    w.pending = { id, lines, onLine, finish: (extra) => { clearTimeout(timer); w.pending = null; if (extra) lines.push(extra); resolve(lines); } };
+    w.child.stdin.write(JSON.stringify(req) + '\n');
+  });
+  const p = queue.then(run);
+  queue = p.catch(() => {});
+  return p;
 }
 
 // ---- ההגדרות והטבלה — כמו באתר ----
@@ -402,7 +423,8 @@ async function syncDevice(dev) {
     }
     status('מכין את ההעתקה לנגן…', (refreshError ? 'אין אינטרנט במחשב — מעתיק את מה שכבר הורד' : 'עוד רגע מתחילים') + KEEP);
     await statusFlush();
-    await push(dev.free, (st && st.have) || []); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
+    log(`אחסון: ${st.storage}, פנוי ${((st.free || 0) / GB).toFixed(1)}GB`);
+    await push(st.free || 0, st.have || []); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
   } catch (e) {
     log('שגיאה בהעתקה:', e.message);
     status('ההעתקה נכשלה', 'נתקו וחברו שוב את הנגן', { error: true });
@@ -433,7 +455,7 @@ async function main() {
   for (;;) {
     const dev = await findDevice();
     if (dev && !wasConnected) {
-      log('הנגן חובר (' + dev.storage + ', פנוי ' + (dev.free / 1024 ** 3).toFixed(1) + 'GB)');
+      log('מכשיר חובר: ' + dev.device);
       await syncDevice(dev);
     }
     wasConnected = !!dev;
@@ -441,4 +463,7 @@ async function main() {
   }
 }
 
+// תקלה לא צפויה לא מפילה את התוכנה — רק נרשמת ביומן
+process.on('uncaughtException', (e) => log('תקלה:', e.stack || e.message));
+process.on('unhandledRejection', (e) => log('תקלה:', (e && e.stack) || e));
 main().catch(e => { log('שגיאה:', e.stack || e.message); process.exit(1); });
