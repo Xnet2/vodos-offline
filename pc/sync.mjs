@@ -71,7 +71,8 @@ function applyState(text) {
 // מריץ את mtp.ps1; כל שורת JSON שהוא מדפיס מגיעה ל-onLine מיד (להתקדמות), וכולן חוזרות בסוף
 // העתקה לאחסון שאסור לכתוב אליו (למשל הזיכרון הפנימי באנדרואיד 11+) יכולה להיתקע לתמיד — לכן לכל פעולה יש זמן מקסימלי
 const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60e3 };
-let storagePref = loadJSON('storage.json', {}).name || ''; // האחסון בנגן שעבד בפעם הקודמת
+// האחסון בנגן שבו נמצאים הסרטונים (נשמר רק כשבאמת היה בו index — כדי לא "להינעל" על הזיכרון הפנימי)
+let storagePref = loadJSON('storage2.json', {}).name || '';
 let avoid = '';                                           // אחסון שנתקע בחיבור הזה
 let knownStops = [];       // בקשות עצירה (stop-*.txt) שכבר היו בנגן כשהחיבור התחיל
 let stopRequested = false; // ביקשו בנגן לעצור את העדכון — מפסיקים להוריד ולהעתיק
@@ -283,10 +284,7 @@ function status(title, text, extra = {}) {
         for (let i = 0; i < 2; i++) {
           const out = await ps(['put', '-Local', STATUS_DIR, '-List', name]);
           const ok = out.find(o => o.ok);
-          if (ok) {
-            if (ok.storage && ok.storage !== storagePref) { storagePref = ok.storage; saveJSON('storage.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
-            break;
-          }
+          if (ok || out.some(o => o.error)) break;
           const tried = out.filter(o => o.trying).pop();
           if (!tried) break;
           avoid = tried.trying;
@@ -420,6 +418,7 @@ async function syncDevice(dev) {
     if (st && st.error) throw new Error(st.error);
     if (st && st.timeout) throw new Error('קריאה מהנגן נתקעה');
     knownStops = (st.have || []).filter(n => n.startsWith('stop-'));
+    if (st.hasIndex && st.storage !== storagePref) { storagePref = st.storage; saveJSON('storage2.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
     const changed = st && st.state ? applyState(st.state) : false;
     // בזמן ההורדה — כל 5 שניות בודקים אם ביקשו בנגן לעצור
     let checking = false;

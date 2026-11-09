@@ -40,7 +40,32 @@ function Get-Path($folder, $path) {
 # כל האחסונים שיש בהם את התיקייה של האפליקציה, מהמועדף: זה שעבד בפעם הקודמת (-Storage), אחר כך זה שכבר יש בו
 # סרטונים, ואחר כך הכי הרבה מקום. (בזיכרון הפנימי של אנדרואיד 11+ אסור למחשב לכתוב לתיקייה של אפליקציה,
 # ומיד אחרי החיבור הרשימה בכרטיס לפעמים עוד לא נטענה — לכן לא סומכים רק על "יש בו סרטונים".)
+function Storage-Names {
+  $names = @()
+  foreach ($dev in (New-Object -ComObject Shell.Application).Namespace(17).Items()) {
+    if ($dev.IsFileSystem -or ($Device -and $dev.Name -ne $Device)) { continue }
+    $names += @($dev.GetFolder.Items() | Where-Object { $_.IsFolder } | ForEach-Object { $_.Name })
+  }
+  return $names
+}
+
+# מיד אחרי החיבור אנדרואיד מציג קודם את הזיכרון הפנימי ורק אחר כך את הכרטיס. מחכים (עד 20 שניות) שהאחסון
+# שעבד בפעם הקודמת יופיע, ושרשימת האחסונים תפסיק להשתנות — אחרת בוחרים בטעות בזיכרון הפנימי
+function Wait-Storages {
+  $end = (Get-Date).AddSeconds(20); $prev = $null
+  while ((Get-Date) -lt $end) {
+    $now = @(Storage-Names) -join '|'
+    if ($now -and $now -eq $prev -and (-not $Storage -or @(Storage-Names) -contains $Storage)) { return }
+    $prev = $now
+    Start-Sleep -Milliseconds 1500
+  }
+}
+
+# האם המכשיר עדיין מחובר — בודקים לפני כל העתקה, כי העתקה למכשיר שנותק מקפיצה חלון שגיאה של Windows
+function Test-Connected { return [bool](@(Storage-Names).Count) }
+
 function Get-Storages {
+  Wait-Storages
   $sh = New-Object -ComObject Shell.Application
   $list = @()
   foreach ($dev in $sh.Namespace(17).Items()) {
@@ -51,12 +76,15 @@ function Get-Storages {
       if (-not $app) { continue }
       $score = [double]$s.ExtendedProperty('System.FreeSpace')
       $files = Get-Child $app 'files'
-      if ($files -and (@($files.GetFolder.Items()) | Where-Object { $_.Name -like 'index-*.json' })) { $score += 1e15 }
-      if ($Storage -and $s.Name -eq $Storage) { $score += 2e15 }
-      $list += [pscustomobject]@{ Item = $s; Score = $score }
+      $hasIndex = [bool]($files -and (@($files.GetFolder.Items()) | Where-Object { $_.Name -like 'index-*.json' }))
+      if ($hasIndex) { $score += 2e15 }                          # הסרטונים כבר שם — הכי חשוב
+      if ($Storage -and $s.Name -eq $Storage) { $score += 1e15 }
+      $list += [pscustomobject]@{ Item = $s; Score = $score; HasIndex = $hasIndex }
     }
   }
-  return @($list | Sort-Object Score -Descending | ForEach-Object { $_.Item })
+  $sorted = @($list | Sort-Object Score -Descending)
+  $script:FirstHasIndex = [bool]($sorted.Count -and $sorted[0].HasIndex)
+  return @($sorted | ForEach-Object { $_.Item })
 }
 function Get-Storage { return (Get-Storages | Select-Object -First 1) }
 
@@ -113,7 +141,7 @@ switch ($Action) {
       try { $text = [IO.File]::ReadAllText($dest, [Text.Encoding]::UTF8); Remove-Item -LiteralPath $dest } catch { $text = $null }
       if ($text) { break }
     }
-    Out-Json @{ have = $have; state = $text; storage = $s.Name; free = [double]$s.ExtendedProperty('System.FreeSpace') }
+    Out-Json @{ have = $have; state = $text; storage = $s.Name; hasIndex = $script:FirstHasIndex; free = [double]$s.ExtendedProperty('System.FreeSpace') }
   }
 
   # האם ביקשו בנגן לעצור את העדכון
@@ -145,6 +173,7 @@ switch ($Action) {
     # קודם ישר לאחסון שעבד בפעם הקודמת (מהיר); רק אם אין — סריקה מלאה של כל האחסונים
     $all = @()
     if ($Storage -and $Storage -ne $Avoid) {
+      Wait-Storages
       $sh = New-Object -ComObject Shell.Application
       foreach ($dev in $sh.Namespace(17).Items()) {
         if ($dev.IsFileSystem) { continue }
@@ -159,6 +188,7 @@ switch ($Action) {
       $folder = Get-Path $s.GetFolder $Target
       if (-not $folder) { continue }
       Out-Json @{ trying = $s.Name }
+      if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
       $folder.CopyHere($path, 4 + 16 + 1024)
       $deadline = (Get-Date).AddSeconds(12)
       while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
@@ -170,6 +200,7 @@ switch ($Action) {
         $folder = Get-Path $s.GetFolder $Target
         if (-not $folder) { continue }
         Out-Json @{ trying = $s.Name }
+        if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
         $folder.CopyHere($path, 4 + 16 + 1024)
         $deadline = (Get-Date).AddSeconds(12)
         while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
@@ -197,6 +228,7 @@ switch ($Action) {
     Out-Json @{ todo = $names.Count; existing = $have.Count }
 
     function Copy-One($n) {
+      if (-not (Test-Connected)) { return $false }
       $path = Join-Path $Local $n
       $size = (Get-Item -LiteralPath $path).Length
       $folder.CopyHere($path, 4 + 16 + 1024)  # בלי חלון התקדמות, "כן לכל", בלי חלונות שגיאה
@@ -221,6 +253,7 @@ switch ($Action) {
     }
     $done = 0
     foreach ($n in $names) {
+      if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
       # כל 3 קבצים: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
       if ($done % 3 -eq 0 -and $done -gt 0 -and (Get-NewStops (Get-AppFolder)).Count) { Out-Json @{ stopped = $true; copied = $done }; return }
       $ok = Copy-One $n
