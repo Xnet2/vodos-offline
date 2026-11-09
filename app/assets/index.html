@@ -6,6 +6,9 @@
 <title>VODOS</title>
 <!-- הפיד של VODOS לנגן, בלי אינטרנט: אותו עיצוב כמו האתר, מהסרטונים שבתיקייה של האפליקציה -->
 <style>
+/* Assistant — מקובץ בתוך האפליקציה (כל המשקלים, 29KB), כדי שיעבוד בלי אינטרנט */
+@font-face{font-family:Assistant;font-style:normal;font-weight:400 800;font-display:swap;src:url(assistant-hebrew.woff2) format("woff2");unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F}
+@font-face{font-family:Assistant;font-style:normal;font-weight:400 800;font-display:swap;src:url(assistant-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 :root{--bg:#000;--fg:#fff;--muted:rgba(255,255,255,.75);--accent:#fe2c55;--ink:#161823}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:#000;color:var(--fg);font-family:Assistant,"Segoe UI",Roboto,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -87,6 +90,70 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .step button{width:34px;height:34px;border-radius:50%;background:#f1f1f2;font-size:20px;font-weight:700;line-height:1}
 .step output{min-width:58px;text-align:center;font-weight:800;font-size:15px}
 .sheet .done{width:100%;margin-top:12px;padding:11px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px}
+/* ---- הנפשות קטנות ---- */
+.srcbtn,.gear,.like,.tab,.step button,.sheet .done,.chip,.avatar,.who b,.grid button,.back{transition:transform .14s ease-out,background-color .15s,opacity .15s}
+.srcbtn:active,.gear:active,.tab:active,.step button:active,.sheet .done:active,.chip:active,.back:active,.grid button:active{transform:scale(.93)}
+.like:active svg{transform:scale(.86)}
+.avatar:active,.who b:active{transform:scale(.92);opacity:.85}
+.gear svg{transition:transform .4s cubic-bezier(.3,1.4,.5,1)}
+.gear.on svg{transform:rotate(90deg)}
+.menu:not([hidden]){animation:drop .2s cubic-bezier(.2,.9,.3,1);transform-origin:top right}
+.menu .tab{animation:fadein .25s both}
+.feedtabs button[aria-selected=true]::after{animation:grow .22s ease-out}
+.sheetbg:not([hidden]){animation:fadein .2s}
+.sheetbg:not([hidden]) .sheet{animation:up .3s cubic-bezier(.2,.9,.3,1)}
+.sheetbg.closing{animation:fadeout .2s forwards}
+.sheetbg.closing .sheet{animation:down .2s ease-in forwards}
+@keyframes drop{from{opacity:0;transform:scale(.9) translateY(-6px)}}
+@keyframes fadein{from{opacity:0}}
+@keyframes fadeout{to{opacity:0}}
+@keyframes grow{from{transform:scaleX(0)}}
+@keyframes up{from{transform:translateY(100%)}}
+@keyframes down{to{transform:translateY(100%)}}
+
+/* ---- הגדרות: גוללות, עם מידע ומתגים ---- */
+.sheet{max-height:88%;overflow-y:auto}
+.sheet h3{margin:14px 0 2px;font-size:13px;font-weight:700;color:#8a8b91}
+.stats{display:flex;gap:8px;margin:8px 0 2px}
+.stats div{flex:1;padding:9px 6px;border-radius:12px;background:#f4f4f6;text-align:center}
+.stats b{display:block;font-size:17px;font-weight:800}
+.stats small{font-size:11.5px;color:#8a8b91}
+.meter{height:6px;margin:10px 0 4px;border-radius:3px;background:#eceef1;overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#25f4ee,#fe2c55);transition:width .6s cubic-bezier(.2,.9,.3,1)}
+.switch{position:relative;flex:none;width:44px;height:26px;border-radius:13px;background:#d6d7db;transition:background-color .2s}
+.switch::after{content:"";position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .22s cubic-bezier(.3,1.3,.5,1)}
+.switch[aria-checked=true]{background:var(--accent)}
+.switch[aria-checked=true]::after{transform:translateX(-18px)}
+.chip{flex:none;padding:7px 12px;border-radius:999px;background:#f1f1f2;font-size:13.5px;font-weight:700}
+.chip.warn{color:var(--accent)}
+.ver{margin-top:12px;font-size:12px;color:#b0b1b6;text-align:center}
+
+/* ---- חלונית ערוץ: נכנסת מהצד, עם האייקון בגדול, מידע ורשת סרטונים ---- */
+.chan{position:absolute;top:0;left:0;right:0;bottom:0;z-index:45;background:#fff;color:var(--ink);overflow-y:auto;transform:translateX(-100%);transition:transform .26s ease-in,visibility 0s .26s;visibility:hidden}
+.chan.open{transform:none;visibility:visible;transition:transform .32s cubic-bezier(.2,.9,.3,1)}
+.chan .head{position:sticky;top:0;z-index:2;display:flex;align-items:center;height:48px;padding:0 8px;background:rgba(255,255,255,.94);border-bottom:1px solid #f0f0f2}
+.chan .head b{flex:1;text-align:center;font-size:16px;margin-left:36px}
+.back{width:36px;height:36px;display:flex;align-items:center;justify-content:center}
+.back svg{width:24px;height:24px}
+.prof{padding:20px 18px 14px;text-align:center}
+.prof .big{width:96px;height:96px;margin:0 auto 10px;border-radius:50%;border:1px solid #eceef1;overflow:hidden;background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:var(--ink);transform:scale(.6);opacity:0;transition:transform .45s cubic-bezier(.3,1.4,.5,1) .08s,opacity .25s .08s}
+.chan.open .prof .big{transform:none;opacity:1}
+.prof .big{position:relative}
+.prof .big img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.prof h2{font-size:20px;font-weight:800}
+.prof .handle{font-size:13.5px;color:#8a8b91;direction:ltr}
+.prof .nums{display:flex;justify-content:center;gap:22px;margin:14px 0 10px}
+.prof .nums b{display:block;font-size:17px;font-weight:800}
+.prof .nums small{font-size:12px;color:#8a8b91}
+.prof p{font-size:14px;line-height:1.55;color:#55565c;max-width:330px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.grid button{position:relative;padding-top:177.78%;background:#e9e9ec;overflow:hidden;animation:fadein .3s both}
+.grid img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+.grid img.ok{opacity:1}
+.grid span{position:absolute;right:6px;bottom:5px;font-size:11.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.grid .seen{position:absolute;top:5px;left:5px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.45);font-size:10.5px;font-weight:700;color:#fff}
+.grid .heart{position:absolute;top:5px;right:5px;width:16px;height:16px;fill:var(--accent);filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
+.who b{display:inline-block;cursor:pointer}
 .state,.endslide{height:100%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);line-height:1.7;font-size:15px}
 .state h2,.endslide h2{color:var(--fg);font-size:20px;margin-bottom:6px}
 .state img{height:28px;margin-bottom:24px}
@@ -110,14 +177,51 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 <div class="sheetbg" id="settings" hidden>
   <div class="sheet">
     <h2>הגדרות</h2>
+    <div class="stats">
+      <div><b id="stCount">–</b><small>סרטונים בנגן</small></div>
+      <div><b id="stNew">–</b><small>עוד לא נצפו</small></div>
+      <div><b id="stLiked">–</b><small>אהבתי</small></div>
+    </div>
+    <div class="meter"><i id="stMeter"></i></div>
+    <p class="note" id="stSpace"></p>
+    <p class="note" id="stLast"></p>
+
+    <h3>העתקה מהמחשב</h3>
     <p class="note">ההגדרות עוברות למחשב בחיבור הבא. סרטונים שנצפו מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
     <div class="row"><div><b>נפח במחשב</b><small>כמה סרטונים להוריד ולשמור במחשב</small></div>
       <div class="step"><button type="button" data-k="pcGB" data-d="-1">−</button><output id="pcGB"></output><button type="button" data-k="pcGB" data-d="1">+</button></div></div>
     <div class="row"><div><b>נפח בנגן</b><small>כמה סרטונים להעביר לנגן בכל חיבור</small></div>
       <div class="step"><button type="button" data-k="deviceGB" data-d="-1">−</button><output id="deviceGB"></output><button type="button" data-k="deviceGB" data-d="1">+</button></div></div>
+
+    <h3>צפייה</h3>
+    <div class="row"><div><b>מעבר אוטומטי לסרטון הבא</b><small>בסוף סרטון — לגלול לבא אחריו, במקום לנגן שוב</small></div>
+      <button class="switch" type="button" role="switch" data-opt="autoNext" aria-label="מעבר אוטומטי"></button></div>
+    <div class="row"><div><b>הסתרת סרטונים שנצפו</b><small>בלשונית "עדכני" להציג רק מה שעוד לא ראיתם</small></div>
+      <button class="switch" type="button" role="switch" data-opt="hideWatched" aria-label="הסתרת סרטונים שנצפו"></button></div>
+    <div class="row"><div><b>היסטוריית צפייה</b><small id="stWatched"></small></div>
+      <button class="chip warn" id="resetWatched" type="button">איפוס</button></div>
+
+    <h3>איך זה עובד</h3>
+    <p class="note">מחברים את הנגן בכבל למחשב שבו מותקנת התוכנה "VODOS לנגן". המחשב מוריד את הסרטונים החדשים מכל הערוצים ומעתיק אותם לנגן — ההתקדמות מופיעה בהתראה ובפס למעלה. אחרי ההעתקה אפשר לנתק ולצפות בלי אינטרנט.</p>
     <button class="done" id="settingsDone" type="button">סגירה</button>
+    <p class="ver" id="ver"></p>
   </div>
 </div>
+<section class="chan" id="chan" aria-hidden="true">
+  <div class="head"><button class="back" id="chanBack" type="button" aria-label="חזרה"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></button><b id="chanTitle"></b></div>
+  <div class="prof">
+    <div class="big" id="chanAvatar"></div>
+    <h2 id="chanName"></h2>
+    <div class="handle" id="chanHandle"></div>
+    <div class="nums">
+      <div><b id="chanCount"></b><small>סרטונים</small></div>
+      <div><b id="chanNew"></b><small>לא נצפו</small></div>
+      <div><b id="chanLiked"></b><small>אהבתי</small></div>
+    </div>
+    <p id="chanAbout"></p>
+  </div>
+  <div class="grid" id="chanGrid"></div>
+</section>
 </div>
 <script>
 (function () {
@@ -169,7 +273,9 @@ function toggleLike(v) {
 }
 
 var GB_STEPS = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
-var settings = get('vod_settings', { pcGB: 2, deviceGB: 2 });
+var settings = get('vod_settings', {});
+if (!settings.pcGB) settings.pcGB = 2;
+if (!settings.deviceGB) settings.deviceGB = 2;
 
 // מה שהמחשב צריך לדעת מהנגן — נכתב לקובץ בתיקייה של האפליקציה ונקרא בחיבור הבא
 var saveTimer = null;
@@ -230,7 +336,12 @@ function slide(v) {
   video.addEventListener('timeupdate', function () { if (video.duration) bar.style.transform = 'scaleX(' + (video.currentTime / video.duration) + ')'; });
   video.addEventListener('ended', function () {
     el.classList.add('outro');
-    setTimeout(function () { if (el.classList.contains('outro') && activeVideo === video && video.ended) play(video); }, OUTRO_MS);
+    setTimeout(function () {
+      if (!el.classList.contains('outro') || activeVideo !== video || !video.ended) return;
+      var next = el.nextElementSibling;
+      if (settings.autoNext && next && next.classList.contains('slide')) feed.scrollTo({ top: next.offsetTop, behavior: 'smooth' });
+      else play(video);
+    }, OUTRO_MS);
   });
   video.addEventListener('play', function () { el.classList.remove('outro', 'paused'); });
   video.addEventListener('waiting', function () { el.classList.add('loading'); });
@@ -239,6 +350,9 @@ function slide(v) {
     if (video !== activeVideo) video.pause(); // play() שהתעכב והתחיל אחרי שכבר גללו הלאה
   });
   if (title) title.addEventListener('click', function (e) { e.stopPropagation(); title.classList.toggle('open'); });
+  // לחיצה על הסמליל או על שם הערוץ — חלונית הערוץ
+  el.querySelector('.avatar').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
+  el.querySelector('.who b').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
   el.addEventListener('click', function () {
     if (!menu.hidden) return closeMenu();
     if (video.paused) play(video); else { video.pause(); el.classList.add('paused'); }
@@ -301,12 +415,15 @@ function more() {
   }
 }
 
-function reload() {
+// startF — להתחיל מסרטון מסוים (מהרשת בחלונית הערוץ)
+function reload(startF) {
   activeVideo = null; cur = -1; clearTimeout(watchTimer);
   Array.prototype.forEach.call(feed.querySelectorAll('video'), release);
   feed.innerHTML = ''; feed.scrollTop = 0; shown = 0;
+  var hideSeen = feedMode === 'unwatched' || (feedMode === 'latest' && settings.hideWatched);
   list = ALL.filter(function (v) {
-    return (!source || v.s === source) && (feedMode !== 'unwatched' || !watched[v.f]) && (feedMode !== 'liked' || liked[v.f]);
+    if (v.f === startF) return true;
+    return (!source || v.s === source) && !(hideSeen && watched[v.f]) && (feedMode !== 'liked' || liked[v.f]);
   });
   if (!ALL.length) {
     feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין עדיין סרטונים</h2>חברו את הנגן למחשב שבו מותקנת התוכנה "VODOS לנגן", והסרטונים יועתקו אליו אוטומטית.</div>';
@@ -318,26 +435,127 @@ function reload() {
       : '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
     return;
   }
-  more();
-  setActive(0);
+  var start = 0;
+  if (startF) for (var k = 0; k < list.length; k++) if (list[k].f === startF) { start = k; break; }
+  while (shown <= start + 1 && shown < list.length) more();
+  if (start) feed.scrollTop = start * feed.clientHeight;
+  setActive(start);
 }
 
-// ---- הגדרות: כמה לשמור במחשב וכמה להעביר לנגן ----
-var sheet = document.getElementById('settings');
+// ---- הגדרות: מידע על הנגן, נפח, אפשרויות צפייה ----
+var sheet = document.getElementById('settings'), gear = document.getElementById('gear');
+function $(id) { return document.getElementById(id); }
 function gb(x) { return (x < 1 ? x * 1000 + 'MB' : x + 'GB'); }
-function showSettings() {
-  document.getElementById('pcGB').textContent = gb(settings.pcGB);
-  document.getElementById('deviceGB').textContent = gb(settings.deviceGB);
+function size(b) { return b >= 1e9 ? (b / 1073741824).toFixed(1) + 'GB' : Math.round(b / 1048576) + 'MB'; }
+function bridge(name, d) { try { return window.VODOS && VODOS[name] ? JSON.parse(VODOS[name]()) : d; } catch (e) { return d; } }
+function openSheet(el) { el.classList.remove('closing'); el.hidden = false; }
+function closeSheet(el, then) {
+  if (el.hidden || el.classList.contains('closing')) return;
+  el.classList.add('closing');
+  setTimeout(function () { el.hidden = true; el.classList.remove('closing'); if (then) then(); }, 190);
 }
-document.getElementById('gear').addEventListener('click', function () { closeMenu(); showSettings(); sheet.hidden = false; });
-document.getElementById('settingsDone').addEventListener('click', function () { sheet.hidden = true; });
+function showSettings() {
+  $('pcGB').textContent = gb(settings.pcGB);
+  $('deviceGB').textContent = gb(settings.deviceGB);
+  Array.prototype.forEach.call(sheet.querySelectorAll('[data-opt]'), function (b) { b.setAttribute('aria-checked', String(!!settings[b.getAttribute('data-opt')])); });
+  var seen = ALL.filter(function (v) { return watched[v.f]; }).length;
+  $('stCount').textContent = ALL.length;
+  $('stNew').textContent = ALL.length - seen;
+  $('stLiked').textContent = likes.length;
+  $('stWatched').textContent = seen ? 'צפית ב-' + seen + ' מתוך ' + ALL.length + ' הסרטונים שבנגן' : 'עוד לא צפית בסרטונים';
+  $('stLast').textContent = idx.created ? 'עדכון אחרון מהמחשב: ' + ago(idx.created) : 'עוד לא היה עדכון מהמחשב';
+  var st = bridge('storage', null);
+  if (st && st.used != null) {
+    $('stSpace').textContent = 'הסרטונים תופסים ' + size(st.used) + ' · פנוי בנגן ' + size(st.free);
+    $('stMeter').style.width = '0';
+    setTimeout(function () { $('stMeter').style.width = Math.min(100, st.used / (st.used + st.free) * 100) + '%'; }, 60);
+  } else $('stSpace').textContent = '';
+  var ver = window.VODOS && VODOS.version ? VODOS.version() : '';
+  $('ver').textContent = 'VODOS' + (ver ? ' ' + ver : '') + ' · אופליין';
+}
+gear.addEventListener('click', function () { closeMenu(); showSettings(); gear.classList.add('on'); openSheet(sheet); if (activeVideo) activeVideo.pause(); });
+function closeSettings() { gear.classList.remove('on'); closeSheet(sheet, function () { if (activeVideo && chan.className.indexOf('open') < 0) play(activeVideo); }); }
+$('settingsDone').addEventListener('click', closeSettings);
+var resetArmed = 0;
 sheet.addEventListener('click', function (e) {
-  if (e.target === sheet) { sheet.hidden = true; return; }
+  if (e.target === sheet) return closeSettings();
+  var o = e.target.closest('[data-opt]');
+  if (o) {
+    var key = o.getAttribute('data-opt');
+    settings[key] = !settings[key]; set('vod_settings', settings); showSettings();
+    if (key === 'hideWatched' && feedMode === 'latest') reload();
+    return;
+  }
+  if (e.target.closest('#resetWatched')) {
+    var r = $('resetWatched');
+    if (Date.now() - resetArmed > 3000) { resetArmed = Date.now(); r.textContent = 'בטוח? לחצו שוב'; setTimeout(function () { r.textContent = 'איפוס'; }, 3000); return; }
+    resetArmed = 0; r.textContent = 'איפוס';
+    watchedList = []; watched = {}; set('vod_watched', watchedList); saveState(true); showSettings(); toast('היסטוריית הצפייה אופסה');
+    return;
+  }
   var b = e.target.closest('[data-k]'); if (!b) return;
   var k = b.getAttribute('data-k'), i = GB_STEPS.indexOf(settings[k]);
   if (i < 0) i = 2;
   settings[k] = GB_STEPS[Math.max(0, Math.min(GB_STEPS.length - 1, i + +b.getAttribute('data-d')))];
   set('vod_settings', settings); showSettings(); saveState(true);
+});
+
+// ---- חלונית ערוץ: סמליל גדול, מידע, כמה סרטונים יש, ורשת הסרטונים (כמו בטיקטוק) ----
+var ABOUT = {
+  hagizra: 'חדשות ואקטואליה לציבור החרדי — מבזקים, עדכונים וכתבות וידאו מהשטח.',
+  blackcat: 'סרטונים קצרים ועדכונים שוטפים — מה שקורה עכשיו, בקצרה.',
+  pargod: 'קבוצת החדשות "הפרגוד" — חדשות ואקטואליה בסרטונים קצרים, לציבור החרדי והדתי.',
+  pargodmusic: 'ערוץ המוזיקה של הפרגוד — סינגלים, קליפים והופעות מעולם המוזיקה היהודית.',
+  musiconline: 'חדשות המוזיקה היהודית — סינגלים חדשים, קליפים והופעות.'
+};
+var chan = $('chan'), chanGrid = $('chanGrid'), thumbTimer = null;
+function openChan(s) {
+  var src = sources[s] || {}, name = src.name || s, a = src.avatar || '';
+  var url = !a ? '' : /^data:/.test(a) ? a : base + a;
+  var vids = ALL.filter(function (v) { return v.s === s; });
+  $('chanTitle').textContent = name;
+  $('chanName').textContent = name;
+  $('chanHandle').textContent = '@' + s;
+  $('chanAvatar').innerHTML = esc(name.charAt(0)) + (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '');
+  $('chanCount').textContent = vids.length;
+  $('chanNew').textContent = vids.filter(function (v) { return !watched[v.f]; }).length;
+  $('chanLiked').textContent = vids.filter(function (v) { return liked[v.f]; }).length;
+  $('chanAbout').textContent = ABOUT[s] || 'ערוץ ב-VODOS';
+  chanGrid.innerHTML = vids.map(function (v, i) {
+    return '<button type="button" data-f="' + esc(v.f) + '" style="animation-delay:' + Math.min(i, 15) * 25 + 'ms"><img alt="">' +
+      (watched[v.f] ? '<i class="seen">נצפה</i>' : '') + (liked[v.f] ? HEART.replace('<svg', '<svg class="heart"') : '') +
+      '<span>' + esc(ago(v.ts)) + '</span></button>';
+  }).join('');
+  chan.scrollTop = 0;
+  if (activeVideo) activeVideo.pause();
+  chan.classList.add('open'); chan.setAttribute('aria-hidden', 'false');
+  loadThumbs(0);
+}
+// התמונות הקטנות נוצרות בנגן ברקע — שואלים שוב כל רגע, עד שכולן מוכנות
+function loadThumbs(round) {
+  clearTimeout(thumbTimer);
+  if (!window.VODOS || !VODOS.thumb || chan.className.indexOf('open') < 0) return;
+  var missing = 0;
+  Array.prototype.forEach.call(chanGrid.querySelectorAll('button'), function (b) {
+    var img = b.querySelector('img'); if (img.src) return;
+    var u = VODOS.thumb(b.getAttribute('data-f'));
+    if (u) { img.onload = function () { img.className = 'ok'; }; img.src = u; } else missing++;
+  });
+  if (missing && round < 120) thumbTimer = setTimeout(function () { loadThumbs(round + 1); }, 700);
+}
+function closeChan(keepPaused) {
+  clearTimeout(thumbTimer);
+  chan.classList.remove('open'); chan.setAttribute('aria-hidden', 'true');
+  if (!keepPaused && activeVideo && sheet.hidden) play(activeVideo);
+}
+$('chanBack').addEventListener('click', function () { closeChan(); });
+chanGrid.addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  var s = (ALL.filter(function (v) { return v.f === b.getAttribute('data-f'); })[0] || {}).s;
+  closeChan(true);
+  source = s || ''; set('vod_source', source);
+  feedMode = 'latest'; set('vod_feed', feedMode);
+  buildMenu(); showTab(); reload(b.getAttribute('data-f'));
 });
 
 // ---- מקורות ו"עדכני / לא נצפו" ----
@@ -390,7 +608,8 @@ if (shownSync) { pollSync(); setInterval(pollSync, 1500); }
 
 window.vodosPause = function () { if (activeVideo) activeVideo.pause(); if (saveTimer) saveState(true); };
 window.vodosBack = function () {
-  if (!sheet.hidden) { sheet.hidden = true; return true; }
+  if (!sheet.hidden) { closeSettings(); return true; }
+  if (chan.className.indexOf('open') >= 0) { closeChan(); return true; }
   if (!menu.hidden) { closeMenu(); return true; }
   return false;
 };

@@ -32,12 +32,23 @@ mkdirSync(CACHE, { recursive: true });
 function log(...a) {
   const line = new Date().toLocaleString('he-IL') + '  ' + a.join(' ');
   console.log(line);
-  try { appendFileSync(join(HOME, 'log.txt'), line + '\n'); } catch {}
+  // אם log.txt נעול או חסום לכתיבה — ממשיכים ביומן חלופי, העיקר לא לעצור
+  for (const name of ['log.txt', 'log2.txt']) { try { appendFileSync(join(HOME, name), line + '\n'); return; } catch {} }
+}
+
+// מחיקה שלא עוצרת את הסנכרון אם קובץ אחד לא נמחק (למשל נעול)
+const rmFailed = new Set(); // לרשום ביומן פעם אחת לכל קובץ, לא בכל רענון
+function rm(p) {
+  try { rmSync(p, { force: true }); }
+  catch (e) { if (!rmFailed.has(p)) { rmFailed.add(p); log('לא הצלחתי למחוק', p.split(/[\\/]/).pop(), e.code || e.message); } }
 }
 
 // ---- מה שהגיע מהנגן בחיבור האחרון: הגדרות, אהבתי ומה נצפה (נשמר במחשב בין חיבורים) ----
 function loadJSON(name, def) { try { return JSON.parse(readFileSync(join(HOME, name), 'utf8')); } catch { return def; } }
-function saveJSON(name, v) { writeFileSync(join(HOME, name), JSON.stringify(v)); }
+function saveJSON(name, v) {
+  try { writeFileSync(join(HOME, name), JSON.stringify(v)); }
+  catch { rm(join(HOME, name)); try { writeFileSync(join(HOME, name), JSON.stringify(v)); } catch (e) { log('לא הצלחתי לשמור', name, e.code || e.message); } }
+}
 let settings = { pcGB: 2, deviceGB: 2, ...loadJSON('settings.json', {}) };
 let likes = loadJSON('likes.json', []);                  // [{f,s,t,ts}]
 const watched = new Set(loadJSON('watched.json', []));   // שמות קבצים שכבר נצפו בנגן
@@ -230,7 +241,7 @@ function status(title, text, extra = {}) {
       const s = statusNext; statusNext = null;
       try {
         mkdirSync(STATUS_DIR, { recursive: true });
-        for (const f of readdirSync(STATUS_DIR)) rmSync(join(STATUS_DIR, f), { force: true });
+        for (const f of readdirSync(STATUS_DIR)) rm(join(STATUS_DIR, f));
         const name = 'status-' + Date.now() + '.json';
         writeFileSync(join(STATUS_DIR, name), JSON.stringify(s));
         await ps(['put', '-Local', STATUS_DIR, '-List', name]);
@@ -289,7 +300,7 @@ async function doRefresh() {
   }
 
   const keep = new Set(picked.map(v => v.f).concat([...liked], Object.values(sources).map(s => s.avatar).filter(a => a && !a.startsWith('data:'))));
-  for (const f of readdirSync(CACHE)) if (!keep.has(f) && !f.startsWith('index-')) rmSync(join(CACHE, f), { force: true });
+  for (const f of readdirSync(CACHE)) if (!keep.has(f) && !f.startsWith('index-')) rm(join(CACHE, f));
   selection = { videos: picked, sources };
   log(`רענון: ${picked.length} סרטונים (${(bytes / GB).toFixed(2)}GB מתוך ${settings.pcGB}GB), ${fresh} חדשים הורדו`);
 }
@@ -315,7 +326,7 @@ async function push(free, have) {
   const sources = { ...selection.sources };
   for (const v of keepLiked) if (!sources[v.s]) sources[v.s] = { name: v.s };
 
-  for (const f of readdirSync(CACHE)) if (f.startsWith('index-')) rmSync(join(CACHE, f), { force: true });
+  for (const f of readdirSync(CACHE)) if (f.startsWith('index-')) rm(join(CACHE, f));
   const index = 'index-' + Date.now() + '.json';
   writeFileSync(join(CACHE, index), JSON.stringify({
     created: new Date().toISOString(), sources,
@@ -323,7 +334,8 @@ async function push(free, have) {
       .concat(videos.map(v => ({ f: v.f, s: v.source, t: v.text, ts: v.timestamp }))),
   }));
   const names = keepLiked.map(v => v.f).concat(videos.map(v => v.f), Object.values(sources).map(s => s.avatar).filter(a => a && !a.startsWith('data:')), [index]);
-  const list = join(HOME, 'push-list.txt');
+  for (const f of readdirSync(HOME)) if (/^push-.*\.txt$/.test(f)) rm(join(HOME, f));
+  const list = join(HOME, 'push-' + Date.now() + '.txt'); // שם חדש בכל פעם — לא נתקעים על קובץ ישן
   writeFileSync(list, names.join('\n'), 'utf8');
 
   // ההתקדמות מוצגת בנגן עצמו: mtp.ps1 שולח קודם רשימה (sync-*.json), והאפליקציה סופרת מה כבר הגיע
