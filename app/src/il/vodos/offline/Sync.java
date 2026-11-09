@@ -157,7 +157,20 @@ final class Sync {
   }
 
   // ---- מעקב: כל שנייה וחצי, כל עוד הנגן מחובר לחשמל/מחשב (עד maxMs) ----
+  private static final java.util.concurrent.atomic.AtomicBoolean watching = new java.util.concurrent.atomic.AtomicBoolean();
+
+  // רק מעקב אחד בכל רגע (גם החיבור לחשמל וגם ה-JobScheduler יכולים להפעיל אותו)
+  // אם כבר יש מעקב — מחכים שיסתיים (ולא חוזרים מיד, אחרת ה-JobScheduler מריץ את העבודה שוב ושוב)
   static void watch(Context ctx, long maxMs) {
+    long end = System.currentTimeMillis() + maxMs;
+    while (!watching.compareAndSet(false, true)) {
+      if (System.currentTimeMillis() > end || !charging(ctx)) return;
+      try { Thread.sleep(5000); } catch (InterruptedException e) { return; }
+    }
+    try { watchLoop(ctx, end - System.currentTimeMillis()); } finally { watching.set(false); }
+  }
+
+  private static void watchLoop(Context ctx, long maxMs) {
     android.content.SharedPreferences prefs = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
     long end = System.currentTimeMillis() + maxMs, seen = prefs.getLong("announced", 0);
     Status last = null;

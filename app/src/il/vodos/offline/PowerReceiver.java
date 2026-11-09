@@ -7,11 +7,13 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 
-// אנדרואיד 4.4 (בלי JobScheduler): ההודעה "התחבר לחשמל" מפעילה את המעקב אחרי ההעתקה
+// ההודעה "התחבר לחשמל/למחשב" מפעילה מיד את המעקב אחרי ההעתקה — בלי לפתוח את האפליקציה.
+// (targetSdk 25 — כך אנדרואיד עדיין שולח את ההודעה הזו לאפליקציה שסגורה, ומרשה לה לרוץ ברקע.
+//  ה-JobScheduler נשאר כגיבוי, אבל אנדרואיד דוחה אותו באפליקציות שלא נפתחו לאחרונה.)
 public class PowerReceiver extends BroadcastReceiver {
   @Override
   public void onReceive(Context ctx, Intent intent) {
-    if (Build.VERSION.SDK_INT < 21) ctx.startService(new Intent(ctx, Watch.class));
+    try { ctx.startService(new Intent(ctx, Watch.class)); } catch (Exception e) {}
   }
 
   public static class Watch extends Service {
