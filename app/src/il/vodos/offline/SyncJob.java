@@ -23,6 +23,7 @@ public class SyncJob extends JobService {
 
   @Override
   public boolean onStartJob(final JobParameters params) {
+    Sync.log(this, "job start");
     new Thread(() -> {
       Sync.watch(SyncJob.this, 9 * 60 * 1000); // מערכת ההפעלה מגבילה עבודה ל-10 דקות
       jobFinished(params, false);

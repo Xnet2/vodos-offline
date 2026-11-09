@@ -22,4 +22,4 @@ set "VBS=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VODOS-M36.vbs"
 > "%VBS%" echo CreateObject("WScript.Shell").Run """%SNODE%"" ""%SSYNC%""", 0, False
 wscript "%VBS%"
 echo הותקן. התוכנה רצה עכשיו ברקע, ותופעל אוטומטית בכל הפעלה של המחשב.
-echo יומן: %LOCALAPPDATA%\VODOS-M36\log.txt
+echo יומן: %LOCALAPPDATA%\VODOS-M36\vodos-log.txt

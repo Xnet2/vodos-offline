@@ -13,7 +13,8 @@ import android.os.IBinder;
 public class PowerReceiver extends BroadcastReceiver {
   @Override
   public void onReceive(Context ctx, Intent intent) {
-    try { ctx.startService(new Intent(ctx, Watch.class)); } catch (Exception e) {}
+    Sync.log(ctx, "receiver: " + intent.getAction());
+    try { ctx.startService(new Intent(ctx, Watch.class)); } catch (Exception e) { Sync.log(ctx, "startService failed: " + e); }
   }
 
   public static class Watch extends Service {

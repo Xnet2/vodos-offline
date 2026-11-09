@@ -81,6 +81,22 @@ switch ($Action) {
     Out-Json @{ have = $have; state = $text }
   }
 
+  # קובץ אחד מהנגן למחשב (למשל applog.txt — היומן של האפליקציה), מודפס כטקסט
+  'pull' {
+    $s = Get-Storage
+    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    $folder = Get-Path $s.GetFolder $Target
+    $item = if ($folder) { $folder.ParseName($List) } else { $null }
+    if (-not $item) { Out-Json @{ error = 'not found' }; exit 1 }
+    $dest = Join-Path $Local $List
+    Remove-Item -LiteralPath $dest -ErrorAction SilentlyContinue
+    (New-Object -ComObject Shell.Application).Namespace($Local).CopyHere($item, 4 + 16 + 1024)
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $dest)) { Start-Sleep -Milliseconds 300 }
+    Start-Sleep -Milliseconds 300
+    Out-Json @{ text = [IO.File]::ReadAllText($dest, [Text.Encoding]::UTF8) }
+  }
+
   # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
   'put' {
     $s = Get-Storage

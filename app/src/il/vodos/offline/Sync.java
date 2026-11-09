@@ -88,6 +88,20 @@ final class Sync {
     return best;
   }
 
+  // יומן קצר בנגן (applog.txt בתיקייה של האפליקציה) — כדי לראות מהמחשב מה קרה כשחיברו את הכבל
+  static synchronized void log(Context ctx, String msg) {
+    try {
+      File dir = null;
+      for (File d : ctx.getExternalFilesDirs(null)) if (d != null) dir = d; // הכרטיס, אם יש
+      if (dir == null) return;
+      File f = new File(dir, "applog.txt");
+      if (f.length() > 64 * 1024) f.delete();
+      String line = new java.text.SimpleDateFormat("dd/MM HH:mm:ss", java.util.Locale.US).format(new java.util.Date()) + "  " + msg + "\n";
+      try (java.io.FileOutputStream o = new java.io.FileOutputStream(f, true)) { o.write(line.getBytes("UTF-8")); }
+      android.media.MediaScannerConnection.scanFile(ctx, new String[] { f.getPath() }, null, null);
+    } catch (Exception e) {}
+  }
+
   static boolean charging(Context ctx) {
     Intent b = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
     return b != null && b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
@@ -167,7 +181,11 @@ final class Sync {
       if (System.currentTimeMillis() > end || !charging(ctx)) return;
       try { Thread.sleep(5000); } catch (InterruptedException e) { return; }
     }
-    try { watchLoop(ctx, end - System.currentTimeMillis()); } finally { watching.set(false); }
+    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    log(ctx, "watch start, charging=" + charging(ctx) + ", notifications=" + (Build.VERSION.SDK_INT >= 24 ? nm.areNotificationsEnabled() : true));
+    try { watchLoop(ctx, end - System.currentTimeMillis()); }
+    catch (Throwable t) { log(ctx, "watch error: " + t); }
+    finally { watching.set(false); log(ctx, "watch end, charging=" + charging(ctx)); }
   }
 
   private static void watchLoop(Context ctx, long maxMs) {
@@ -180,7 +198,7 @@ final class Sync {
       if (s.msg) {
         String key = s.id + s.title + s.text;
         if (s.active || (s.error && s.id > prefs.getLong("error", 0))) {
-          if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; }
+          if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; log(ctx, "notify msg: " + s.title + " / " + s.text); }
           if (s.error) prefs.edit().putLong("error", s.id).apply();
         } else if (shown != null && !s.error) { cancel(ctx); shown = null; } // המחשב הפסיק לשלוח
         if (!charging(ctx)) { if (s.active) cancel(ctx); return; }
@@ -189,6 +207,7 @@ final class Sync {
       }
       shown = null;
       if (s.id > seen && (s.active || s.finished)) {
+        if (last == null || last.finished != s.finished) log(ctx, "notify copy: " + s.json());
         notifyStatus(ctx, s);
         last = s;
         if (s.finished) { seen = s.id; prefs.edit().putLong("announced", seen).apply(); last = null; }

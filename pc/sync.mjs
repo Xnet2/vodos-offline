@@ -33,7 +33,7 @@ function log(...a) {
   const line = new Date().toLocaleString('he-IL') + '  ' + a.join(' ');
   console.log(line);
   // אם log.txt נעול או חסום לכתיבה — ממשיכים ביומן חלופי, העיקר לא לעצור
-  for (const name of ['log.txt', 'log2.txt']) { try { appendFileSync(join(HOME, name), line + '\n'); return; } catch {} }
+  for (const name of ['vodos-log.txt', 'vodos-log2.txt']) { try { appendFileSync(join(HOME, name), line + '\n'); return; } catch {} }
 }
 
 // מחיקה שלא עוצרת את הסנכרון אם קובץ אחד לא נמחק (למשל נעול)
