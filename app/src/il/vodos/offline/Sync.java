@@ -35,8 +35,25 @@ final class Sync {
     }
   }
 
+  // הקבצים מהמחשב מגיעים עם השעה של המחשב, והשעון של הנגן יכול להיות בפיגור של דקות —
+  // אז "מתי השתנה לאחרונה" נמדד לפי השעון של הנגן: מתי ראינו לראשונה את המצב הזה (קובץ + כמה הגיעו)
+  private static final java.util.Map<String, Long> firstSeen = new java.util.HashMap<>();
+  private static synchronized long age(String key, long mtime) {
+    long now = System.currentTimeMillis();
+    Long fs = firstSeen.get(key);
+    if (fs == null) {
+      fs = mtime > 0 && mtime <= now ? mtime : now; // זמן הקובץ, אם הוא לא "בעתיד"
+      if (firstSeen.size() > 200) firstSeen.clear();
+      firstSeen.put(key, fs);
+    }
+    return now - fs;
+  }
+
   static Status read(Context ctx) {
     Status s = readFiles(ctx);
+    // מנותק מהמחשב — שום העתקה לא פעילה
+    if (!charging(ctx)) s.active = false;
+    s.stalled = !s.finished && !s.active && !s.msg;
     // ביקשו לעצור בשלוש הדקות האחרונות, והמחשב עוד לא אישר — "עוצר…"
     long stopAt = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("stopAt", 0);
     s.stopping = s.active && System.currentTimeMillis() - stopAt < 180000;
@@ -69,9 +86,10 @@ final class Sync {
         s.id = stamp(st);
         s.title = o.optString("title");
         s.text = o.optString("text");
-        s.error = o.optBoolean("error") && System.currentTimeMillis() - st.lastModified() < 600000; // שגיאה ישנה כבר לא מעניינת
+        long a = age(st.getName(), st.lastModified());
+        s.error = o.optBoolean("error") && a < 600000; // שגיאה ישנה כבר לא מעניינת
         // אם כבר 3 דקות אין הודעה חדשה — התוכנה במחשב נעצרה או שהנגן נותק
-        s.active = !s.error && System.currentTimeMillis() - st.lastModified() < 180000;
+        s.active = !s.error && a < 180000;
         return s;
       } catch (Exception e) {
         return new Status(); // הקובץ עוד נכתב
@@ -93,7 +111,7 @@ final class Sync {
       return new Status(); // הקובץ עוד נכתב — ננסה שוב בבדיקה הבאה
     }
     s.finished = s.done >= s.total;
-    s.active = !s.finished && System.currentTimeMillis() - newest < 120000;
+    s.active = !s.finished && age(sync.getName() + ":" + s.done, newest) < 120000;
     s.stalled = !s.finished && !s.active;
     return s;
   }
