@@ -12,7 +12,6 @@ param(
   [string]$List,
   [string]$Target = 'Android\data\il.vodos.offline\files',
   [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
-  [string]$Avoid = '',    # אחסון שנכשל בחיבור הזה — לא לנסות שוב
   [string]$Session = ''   # מזהה החיבור הנוכחי — בקשת עצירה מהאפליקציה היא הקובץ stop-<מזהה>.txt
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -52,7 +51,7 @@ function Storage-Names {
 # מיד אחרי החיבור אנדרואיד מציג קודם את הזיכרון הפנימי ורק אחר כך את הכרטיס. מחכים (עד 20 שניות) שהאחסון
 # שעבד בפעם הקודמת יופיע, ושרשימת האחסונים תפסיק להשתנות — אחרת בוחרים בטעות בזיכרון הפנימי
 function Wait-Storages {
-  $end = (Get-Date).AddSeconds(20); $prev = $null
+  $end = (Get-Date).AddSeconds($(if ($Storage) { 60 } else { 20 })); $prev = $null  # הכרטיס שכבר יש בו סרטונים — מחכים לו יותר
   while ((Get-Date) -lt $end) {
     $now = @(Storage-Names) -join '|'
     if ($now -and $now -eq $prev -and (-not $Storage -or @(Storage-Names) -contains $Storage)) { return }
@@ -71,7 +70,7 @@ function Get-Storages {
   foreach ($dev in $sh.Namespace(17).Items()) {
     if ($dev.IsFileSystem -or ($Device -and $dev.Name -ne $Device)) { continue }  # כוננים רגילים (C: וכו') לא מעניינים
     foreach ($s in @($dev.GetFolder.Items())) {
-      if (-not $s.IsFolder -or ($Avoid -and $s.Name -eq $Avoid)) { continue }
+      if (-not $s.IsFolder) { continue }
       $app = Get-Path $s.GetFolder $Target.Substring(0, $Target.LastIndexOf('\'))
       if (-not $app) { continue }
       $score = [double]$s.ExtendedProperty('System.FreeSpace')
@@ -83,6 +82,8 @@ function Get-Storages {
     }
   }
   $sorted = @($list | Sort-Object Score -Descending)
+  # כבר ידוע איפה הסרטונים (-Storage): רק שם, אף פעם לא אחסון אחר. אם הוא לא זמין — אין לאן להעתיק
+  if ($Storage) { $sorted = @($sorted | Where-Object { $_.Item.Name -eq $Storage }) }
   $script:FirstHasIndex = [bool]($sorted.Count -and $sorted[0].HasIndex)
   return @($sorted | ForEach-Object { $_.Item })
 }
@@ -170,46 +171,15 @@ switch ($Action) {
   }
 
   # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
-  # בודק גם שהקובץ באמת הגיע — ואם לא, מנסה באחסון הבא. מחזיר את האחסון שעבד
+  # למקום שבו הסרטונים (או, בפעם הראשונה, לאחסון הכי מתאים). בודק שהקובץ באמת הגיע
   'put' {
-    # קודם ישר לאחסון שעבד בפעם הקודמת (מהיר); רק אם אין — סריקה מלאה של כל האחסונים
-    $all = @()
-    if ($Storage -and $Storage -ne $Avoid) {
-      Wait-Storages
-      $sh = New-Object -ComObject Shell.Application
-      foreach ($dev in $sh.Namespace(17).Items()) {
-        if ($dev.IsFileSystem) { continue }
-        $s = Get-Child $dev.GetFolder $Storage
-        if ($s) { $all = @($s); break }
-      }
-    }
-    if (-not $all.Count) { $all = Get-Storages }
-    if (-not $all.Count) { Out-Json @{ error = 'not connected' }; return }
-    $path = Join-Path $Local $List
-    foreach ($s in $all) {
-      $folder = Get-Path $s.GetFolder $Target
-      if (-not $folder) { continue }
-      Out-Json @{ trying = $s.Name }
-      if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
-      $folder.CopyHere($path, 4 + 16 + 1024)
-      $deadline = (Get-Date).AddSeconds(12)
-      while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
-      if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; return }
-    }
-    # האחסון המועדף לא עבד — סריקה מלאה של השאר
-    if ($Storage) {
-      foreach ($s in (Get-Storages | Where-Object { $_.Name -ne $Storage })) {
-        $folder = Get-Path $s.GetFolder $Target
-        if (-not $folder) { continue }
-        Out-Json @{ trying = $s.Name }
-        if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
-        $folder.CopyHere($path, 4 + 16 + 1024)
-        $deadline = (Get-Date).AddSeconds(12)
-        while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
-        if ($folder.ParseName($List)) { Out-Json @{ ok = $true; storage = $s.Name }; return }
-      }
-    }
-    Out-Json @{ ok = $false }
+    if ($Storage) { Wait-Storages; $folder = Get-AppFolder } else { $s = Get-Storage; $folder = if ($s) { Get-Path $s.GetFolder $Target } else { $null } }
+    if (-not $folder) { Out-Json @{ error = 'not connected' }; return }
+    if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
+    $folder.CopyHere((Join-Path $Local $List), 4 + 16 + 1024)
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
+    Out-Json @{ ok = [bool]$folder.ParseName($List) }
   }
 
   'push' {
@@ -273,12 +243,12 @@ switch ($Action) {
 }
 
 if ($Action -eq 'serve') {
-  # כל שורה: {"id":1,"action":"put","local":"…","list":"…","storage":"…","avoid":"…"}; בסוף כל פקודה: {"end":1}
+  # כל שורה: {"id":1,"action":"put","local":"…","list":"…","storage":"…","session":"…"}; בסוף כל פקודה: {"end":1}
   while ($null -ne ($line = [Console]::In.ReadLine())) {
     if (-not $line.Trim()) { continue }
     $req = $line | ConvertFrom-Json
     $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
-    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid; $Session = [string]$req.session
+    $Storage = [string]$req.storage; $Session = [string]$req.session
     try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
     Out-Json @{ end = $req.id }
   }

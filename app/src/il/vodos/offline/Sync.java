@@ -25,13 +25,13 @@ final class Sync {
     int done, total, videos;
     long id; // הזמן של קובץ ה-sync (או של הודעת המצב) — מזהה את ההעתקה
     // הודעת מצב מהמחשב לפני ההעתקה (status-*.json): "הנגן מחובר", "המחשב מוריד…", או שגיאה
-    boolean msg, error, stopping, stopSlow;
+    boolean msg, error, stopping, stopSlow, waiting;
     String title = "", text = "";
     String session = ""; // מזהה החיבור למחשב (מההודעות שלו) — העצירה מתייחסת רק אליו
 
     String json() {
       return "{\"active\":" + active + ",\"finished\":" + finished + ",\"done\":" + done + ",\"total\":" + total
-          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error + ",\"stopping\":" + stopping + ",\"stopSlow\":" + stopSlow
+          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error + ",\"stopping\":" + stopping + ",\"stopSlow\":" + stopSlow + ",\"waiting\":" + waiting
           + ",\"title\":" + JSONObject.quote(title) + ",\"text\":" + JSONObject.quote(text) + "}";
     }
   }
@@ -50,10 +50,34 @@ final class Sync {
     return now - fs;
   }
 
+  // ברגע שמחברים כבל: זוכרים מה היו ההודעה וההעתקה האחרונות — הן מהחיבור הקודם, ולא מציגים אותן שוב
+  static void markConnect(Context ctx) {
+    File st = newest(ctx, "status"), sy = newest(ctx, "sync");
+    ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).edit()
+        .putString("staleStatus", st == null ? "" : st.getName())
+        .putString("staleSync", sy == null ? "" : sy.getName())
+        .putLong("connectAt", System.currentTimeMillis()).apply();
+  }
+
   static Status read(Context ctx) {
     Status s = readFiles(ctx);
     // מנותק מהמחשב — שום העתקה לא פעילה
     if (!charging(ctx)) s.active = false;
+    else {
+      // מחובר, ועוד לא הגיע שום דבר חדש מהמחשב מאז החיבור — "מחכה למחשב" (בשלוש הדקות הראשונות), ולא ההודעה הישנה
+      android.content.SharedPreferences p = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
+      File st = newest(ctx, "status"), sy = newest(ctx, "sync");
+      boolean nothingNew = (st == null ? "" : st.getName()).equals(p.getString("staleStatus", "-"))
+          && (sy == null ? "" : sy.getName()).equals(p.getString("staleSync", "-"));
+      if (nothingNew) {
+        s = new Status();
+        if (usb(ctx) && System.currentTimeMillis() - p.getLong("connectAt", 0) < 180000) {
+          s.msg = true; s.active = true; s.waiting = true; s.id = p.getLong("connectAt", 1);
+          s.title = "הנגן מחובר"; s.text = "מחכה לתוכנה במחשב…";
+        }
+        return s;
+      }
+    }
     s.stalled = !s.finished && !s.active && !s.msg;
     // "עוצר…" — רק אם לחצו "עצור" בחיבור הזה (לפי המזהה שלו), והמחשב עוד לא אישר
     android.content.SharedPreferences p = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
@@ -153,6 +177,12 @@ final class Sync {
     } catch (Exception e) {}
   }
 
+  // מחובר בכבל USB (מחשב) ולא למטען קיר
+  static boolean usb(Context ctx) {
+    Intent b = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+    return b != null && b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == BatteryManager.BATTERY_PLUGGED_USB;
+  }
+
   static boolean charging(Context ctx) {
     Intent b = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
     return b != null && b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
@@ -194,7 +224,7 @@ final class Sync {
       b.setSmallIcon(android.R.drawable.stat_notify_error).setAutoCancel(true);
     } else {
       b.setSmallIcon(android.R.drawable.stat_sys_download).setProgress(0, 0, true).setOngoing(true);
-      stopAction(ctx, b, s);
+      if (!s.waiting) stopAction(ctx, b, s);
     }
     nm.notify(ID, b.build());
   }

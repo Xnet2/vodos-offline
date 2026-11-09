@@ -73,7 +73,6 @@ function applyState(text) {
 const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60e3 };
 // האחסון בנגן שבו נמצאים הסרטונים (נשמר רק כשבאמת היה בו index — כדי לא "להינעל" על הזיכרון הפנימי)
 let storagePref = loadJSON('storage2.json', {}).name || '';
-let avoid = '';                                           // אחסון שנתקע בחיבור הזה
 let session = '';          // מזהה החיבור הנוכחי (נשלח בהודעות לנגן; העצירה מתייחסת אליו)
 let stopRequested = false; // ביקשו בנגן לעצור את העדכון — מפסיקים להוריד ולהעתיק
 
@@ -102,7 +101,7 @@ function getWorker() {
 function ps(args, onLine) {
   const run = () => new Promise((resolve) => {
     const w = getWorker(), id = ++seq, lines = [];
-    const req = { id, action: args[0], storage: storagePref, avoid, session };
+    const req = { id, action: args[0], storage: storagePref, session };
     for (let i = 1; i < args.length; i += 2) req[args[i].slice(1).toLowerCase()] = args[i + 1];
     const timer = setTimeout(() => {
       lines.push({ timeout: true });
@@ -280,17 +279,8 @@ function status(title, text, extra = {}) {
         for (const f of readdirSync(STATUS_DIR)) rm(join(STATUS_DIR, f));
         const name = 'status-' + Date.now() + '.json';
         writeFileSync(join(STATUS_DIR, name), JSON.stringify(s));
-        // עד שני ניסיונות: אם נתקע באחסון אחד — בפעם השנייה מדלגים עליו
-        for (let i = 0; i < 2; i++) {
-          const out = await ps(['put', '-Local', STATUS_DIR, '-List', name]);
-          const ok = out.find(o => o.ok);
-          if (ok || out.some(o => o.error)) break;
-          const tried = out.filter(o => o.trying).pop();
-          if (!tried) break;
-          avoid = tried.trying;
-          if (storagePref === avoid) storagePref = '';
-          log('לא הצלחתי לכתוב ל-' + avoid + (out.some(o => o.timeout) ? ' (נתקע)' : '') + ' — מנסה אחסון אחר');
-        }
+        const out = await ps(['put', '-Local', STATUS_DIR, '-List', name]);
+        if (!out.some(o => o.ok)) log('הודעת מצב לא הגיעה לנגן' + (out.some(o => o.timeout) ? ' (נתקע)' : ''));
       } catch (e) { log('הודעת מצב לא נשלחה:', e.message); }
     }
     statusBusy = null;
@@ -401,7 +391,7 @@ async function push(free, have) {
 
 async function syncDevice(dev) {
   const KEEP = ' · אל תנתקו את הנגן';
-  avoid = ''; stopRequested = false;
+  stopRequested = false;
   session = Date.now().toString(36); // מזהה החיבור — נשלח בכל הודעה; עצירה בנגן נכתבת כ-stop-<מזהה>.txt
   status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
   let last = 0, stopTimer = null, checking = null;

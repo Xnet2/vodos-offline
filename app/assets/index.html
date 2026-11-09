@@ -928,7 +928,7 @@ var shownSync = hasBridge ? syncStatus() : null;
 var loadedId = shownSync && shownSync.finished ? shownSync.id : 0; // העתקה שהסתיימה לפני שהפיד נטען — כבר בפנים
 var lastS = {};
 function describe(s) {
-  if (s.msg && (s.active || s.error)) return { title: s.title, text: s.text, busy: !s.error, error: s.error, stop: s.active };
+  if (s.msg && (s.active || s.error)) return { title: s.title, text: s.text, busy: !s.error, error: s.error, stop: s.active && !s.waiting };
   if (s.active) return { title: 'מעתיק סרטונים מהמחשב…', text: s.done + ' מתוך ' + s.total + ' · אל תנתקו את הנגן', pct: s.total ? s.done / s.total * 100 : 0, stop: true };
   if (s.finished && s.id !== loadedId) return { title: s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓', text: '', ready: true };
   return null;
