@@ -165,6 +165,8 @@ public class MainActivity extends Activity {
           File[] list = dir.listFiles();
           if (list != null) for (File f : list) {
             String n = f.getName();
+            // בקשת עצירה נשארת 10 דקות — שהמחשב יספיק לראות אותה גם אם הפיד נטען מחדש בינתיים
+            if (n.startsWith("stop-") && System.currentTimeMillis() - f.lastModified() < 600000) continue;
             if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.startsWith("stop-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
           }
           // עותקים באחסון השני (למשל בזיכרון הפנימי, כשהמחשב בחר בו בטעות) — כפולים או ישנים, נמחקים
@@ -174,7 +176,7 @@ public class MainActivity extends Activity {
             if (ol != null) for (File f : ol) {
               String n = f.getName();
               boolean media = n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)");
-              boolean ctl = n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.startsWith("stop-");
+              boolean ctl = n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-");
               if (f.isFile() && ((media && (!keep.contains(n) || new File(dir, n).exists())) || (ctl && !keep.contains(n)))) f.delete();
             }
           }

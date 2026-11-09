@@ -868,12 +868,17 @@ function describe(s) {
   if (s.finished && s.id !== loadedId) return { title: s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓', text: '', ready: true };
   return null;
 }
+function stopNote(s, d) {
+  if (d.stop && s.stopping) return 'עוצר את העדכון…';
+  if (d.stop && s.stopSlow) return 'המחשב לא עצר — אפשר פשוט לנתק את הכבל';
+  return d.text || '';
+}
 function pollSync() {
   var s = syncStatus(); lastS = s;
   var d = describe(s);
   pill.classList.remove('ready', 'busy');
   if (d) {
-    $('syncText').textContent = d.title; $('syncSub').textContent = d.stop && s.stopping ? 'עוצר את העדכון…' : d.text;
+    $('syncText').textContent = d.title; $('syncSub').textContent = stopNote(s, d);
     if (d.pct != null) $('syncBar').style.width = d.pct + '%';
     if (d.busy) pill.classList.add('busy');
     if (d.ready || d.error) pill.classList.add('ready');
@@ -888,7 +893,7 @@ function renderUpdate() {
   var on = !!d.stop;
   $('updBox').classList.toggle('on', on);
   $('updTitle').textContent = d.title || 'הנגן לא מחובר למחשב';
-  $('updText').textContent = d.stop && s.stopping ? 'עוצר את העדכון…' : (d.text || (hasBridge ? 'חברו את הנגן בכבל למחשב כדי לקבל סרטונים חדשים' : ''));
+  $('updText').textContent = d.title ? stopNote(s, d) : (hasBridge ? 'חברו את הנגן בכבל למחשב כדי לקבל סרטונים חדשים' : '');
   $('updTrack').hidden = !on; $('updTrack').classList.toggle('busy', !!d.busy);
   if (d.pct != null) $('updBar').style.width = d.pct + '%';
   $('updStop').hidden = !on; $('updStop').disabled = !!s.stopping; $('updStop').textContent = s.stopping ? 'עוצר…' : 'עצור את העדכון';

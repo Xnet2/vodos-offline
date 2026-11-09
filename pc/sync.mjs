@@ -429,8 +429,11 @@ async function syncDevice(dev) {
       checking = false;
       if (r && r.stops && r.stops.length) { stopRequested = true; log('ביקשו בנגן לעצור'); status('עוצר את העדכון…', 'עוד רגע'); }
     }, 5000);
-    if (refreshing) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
-    await refresh();
+    // אם ביקשו לעצור עוד לפני שהגענו לכאן (קריאת המצב מהנגן יכולה לקחת זמן)
+    const [early] = await ps(['stopcheck']);
+    if (early && early.stops && early.stops.length) { stopRequested = true; log('ביקשו בנגן לעצור'); }
+    if (refreshing && !stopRequested) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
+    if (!stopRequested) await refresh();
     if ((changed || !selection) && !stopRequested) await refresh(); // הנפח במחשב השתנה — לבחור מחדש
     clearInterval(stopTimer);
     onDownload = null;

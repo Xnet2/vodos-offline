@@ -254,8 +254,8 @@ switch ($Action) {
     $done = 0
     foreach ($n in $names) {
       if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
-      # כל 3 קבצים: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
-      if ($done % 3 -eq 0 -and $done -gt 0 -and (Get-NewStops (Get-AppFolder)).Count) { Out-Json @{ stopped = $true; copied = $done }; return }
+      # לפני כל קובץ: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
+      if ((Get-NewStops $(if ($Storage) { Get-AppFolder } else { $folder })).Count) { Out-Json @{ stopped = $true; copied = $done }; return }
       $ok = Copy-One $n
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }

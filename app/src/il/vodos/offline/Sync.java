@@ -25,12 +25,12 @@ final class Sync {
     int done, total, videos;
     long id; // הזמן של קובץ ה-sync (או של הודעת המצב) — מזהה את ההעתקה
     // הודעת מצב מהמחשב לפני ההעתקה (status-*.json): "הנגן מחובר", "המחשב מוריד…", או שגיאה
-    boolean msg, error, stopping;
+    boolean msg, error, stopping, stopSlow;
     String title = "", text = "";
 
     String json() {
       return "{\"active\":" + active + ",\"finished\":" + finished + ",\"done\":" + done + ",\"total\":" + total
-          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error + ",\"stopping\":" + stopping
+          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error + ",\"stopping\":" + stopping + ",\"stopSlow\":" + stopSlow
           + ",\"title\":" + JSONObject.quote(title) + ",\"text\":" + JSONObject.quote(text) + "}";
     }
   }
@@ -55,8 +55,9 @@ final class Sync {
     if (!charging(ctx)) s.active = false;
     s.stalled = !s.finished && !s.active && !s.msg;
     // ביקשו לעצור בשלוש הדקות האחרונות, והמחשב עוד לא אישר — "עוצר…"
-    long stopAt = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("stopAt", 0);
-    s.stopping = s.active && System.currentTimeMillis() - stopAt < 180000;
+    long stopAt = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("stopAt", 0), since = System.currentTimeMillis() - stopAt;
+    s.stopping = s.active && since < 45000;
+    s.stopSlow = s.active && since >= 45000 && since < 300000; // המחשב לא הגיב — אפשר פשוט לנתק
     return s;
   }
 
@@ -169,6 +170,7 @@ final class Sync {
   @SuppressWarnings("deprecation")
   private static void stopAction(Context ctx, Notification.Builder b, Status s) {
     if (s.stopping) { b.setSubText("עוצר את העדכון…"); return; }
+    if (s.stopSlow) b.setSubText("המחשב לא עצר — אפשר לנתק את הכבל");
     PendingIntent stop = PendingIntent.getBroadcast(ctx, 1, new Intent(ctx, PowerReceiver.Stop.class), PendingIntent.FLAG_UPDATE_CURRENT);
     b.addAction(android.R.drawable.ic_menu_close_clear_cancel, "עצור", stop);
   }
@@ -247,7 +249,7 @@ final class Sync {
     while (System.currentTimeMillis() < end) {
       Status s = read(ctx);
       if (s.msg) {
-        String key = s.id + s.title + s.text + s.stopping;
+        String key = s.id + s.title + s.text + s.stopping + s.stopSlow;
         if (s.active || (s.error && s.id > prefs.getLong("error", 0))) {
           if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; log(ctx, "notify msg: " + s.title + " / " + s.text); }
           if (s.error) prefs.edit().putLong("error", s.id).apply();
