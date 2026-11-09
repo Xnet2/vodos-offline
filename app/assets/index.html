@@ -61,8 +61,16 @@ svg{display:block}
 .slide.outro .outrologo{opacity:1;transform:none;transition:opacity .48s cubic-bezier(.33,1,.68,1) .12s,transform .48s cubic-bezier(.33,1,.68,1) .12s}
 .paused-ico{position:absolute;z-index:3;width:64px;height:64px;opacity:0;transition:opacity .2s;pointer-events:none}
 .slide.paused .paused-ico{opacity:.7}
-.bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.25);z-index:3;pointer-events:none}
-.bar i{display:block;height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:right center}
+/* פס ההתקדמות: זז חלק (מתעדכן בכל פריים). באצבע — מתעבה, עם עיגול לגרירה וזמן מעליו */
+.seek{position:absolute;left:0;right:0;bottom:0;height:26px;z-index:4;touch-action:none}
+.bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.25);pointer-events:none;transition:height .15s}
+.bar i{display:block;height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:right center;will-change:transform}
+.knob{position:absolute;bottom:-5px;right:0;width:14px;height:14px;margin-right:-7px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transform:scale(0);transition:transform .15s;pointer-events:none}
+.seektime{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);padding:4px 10px;border-radius:8px;background:rgba(0,0,0,.55);font-size:15px;font-weight:800;direction:ltr;white-space:nowrap;opacity:0;transition:opacity .15s;pointer-events:none}
+.slide.scrub .bar{height:5px}
+.slide.scrub .knob{transform:scale(1)}
+.slide.scrub .seektime{opacity:1}
+.slide.scrub .info,.slide.scrub .side{opacity:.25;transition:opacity .15s}
 /* טבעת טעינה כמו באתר — מופיעה רק אם הטעינה באמת לוקחת זמן */
 .loader{position:absolute;z-index:3;width:44px;height:44px;border-radius:50%;border:7px solid #fff;pointer-events:none;opacity:0;transition:opacity .2s;animation:spin 1s linear infinite}
 .loader::before,.loader::after{content:"";position:absolute;top:-7px;left:-7px;right:-7px;bottom:-7px;border-radius:50%;border:7px solid;z-index:-1}
@@ -90,7 +98,9 @@ svg{display:block}
 
 /* ---- העתקה מהמחשב: גלולה לבנה מתחת לראש, עם פס התקדמות וכפתור עצירה ---- */
 .syncpill{position:absolute;z-index:24;top:60px;left:50%;transform:translate(-50%,-12px);width:max-content;min-width:220px;max-width:92%;padding:8px 14px 9px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13.5px;font-weight:700;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .3s}
-.syncpill.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.syncpill.show{opacity:1;transform:translate(-50%,0);pointer-events:auto;touch-action:pan-y}
+.syncpill.drag{transition:none}
+.syncpill.gone{opacity:0!important;pointer-events:none!important}
 .syncpill small{display:block;margin-top:1px;font-size:12px;font-weight:600;color:var(--gray)}
 .syncpill .row1{display:flex;align-items:center;gap:10px;justify-content:center}
 .syncpill .row1>div{min-width:0}
@@ -473,7 +483,7 @@ function slide(v) {
       '<button class="act dl" type="button" aria-pressed="' + !!saved[v.f] + '">' + DOWN + '<span>הורדה</span></button>' +
       '<button class="act share" type="button">' + SHARE + '<span>שיתוף</span></button>' +
     '</div>' +
-    '<div class="bar"><i></i></div>';
+    '<div class="seek"><div class="bar"><i></i><b class="knob"></b></div><div class="seektime"></div></div>';
   var video = el.querySelector('video'), bar = el.querySelector('.bar i'), title = el.querySelector('.title');
   var like = el.querySelector('.like'), dl = el.querySelector('.dl');
   video._f = v.f;
@@ -496,7 +506,8 @@ function slide(v) {
   el.querySelector('.avatar').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
   el.querySelector('.who b').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
   video.addEventListener('loadedmetadata', function () { if (video.videoWidth > video.videoHeight) el.classList.add('landscape'); });
-  video.addEventListener('timeupdate', function () { if (video.duration) bar.style.transform = 'scaleX(' + (video.currentTime / video.duration) + ')'; });
+  video._bar = bar; video._knob = el.querySelector('.knob');
+  setupSeek(el, video);
   video.addEventListener('ended', function () {
     el.classList.add('outro');
     setTimeout(function () {
@@ -517,6 +528,60 @@ function slide(v) {
     if (video.paused) play(video); else { video.pause(); el.classList.add('paused'); }
   });
   return el;
+}
+
+// ---- פס ההתקדמות: עדכון בכל פריים (חלק), וגרירה באצבע ----
+function showProgress(video, r) {
+  r = Math.max(0, Math.min(1, r || 0));
+  video._bar.style.transform = 'scaleX(' + r + ')';
+  video._knob.style.right = (r * 100) + '%';
+}
+(function frame() {
+  var v = activeVideo;
+  if (v && v.duration && !v._scrubbing && page === 'home') showProgress(v, v.currentTime / v.duration);
+  requestAnimationFrame(frame);
+})();
+function clock(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+
+function setupSeek(el, video) {
+  var seek = el.querySelector('.seek'), label = el.querySelector('.seektime');
+  var wasPlaying = false, lastSet = 0, ratio = 0, hold = null, startX = 0;
+  // הפס מתמלא מימין לשמאל (עברית) — היחס לפי המרחק מהקצה הימני
+  function at(x) { var r = seek.getBoundingClientRect(); return Math.max(0, Math.min(1, (r.right - x) / r.width)); }
+  function move(x, force) {
+    if (!video.duration) return;
+    ratio = at(x);
+    showProgress(video, ratio);
+    label.textContent = clock(ratio * video.duration) + ' / ' + clock(video.duration);
+    // קפיצה בקובץ לוקחת זמן — לא יותר מפעם ב-150ms בזמן הגרירה
+    if (force || Date.now() - lastSet > 150) { lastSet = Date.now(); video.currentTime = ratio * video.duration; }
+  }
+  function begin(x) {
+    if (!video.duration || video !== activeVideo) return false;
+    video._scrubbing = true; wasPlaying = !video.paused;
+    video.pause(); el.classList.add('scrub'); move(x, true);
+    return true;
+  }
+  function end() {
+    if (!video._scrubbing) return;
+    video._scrubbing = false; el.classList.remove('scrub');
+    video.currentTime = ratio * video.duration;
+    if (wasPlaying) play(video);
+  }
+  seek.addEventListener('touchstart', function (e) {
+    e.stopPropagation(); startX = e.touches[0].clientX;
+    begin(startX);
+  }, { passive: true });
+  seek.addEventListener('touchmove', function (e) { if (video._scrubbing) { e.preventDefault(); move(e.touches[0].clientX); } }, { passive: false });
+  seek.addEventListener('touchend', end);
+  seek.addEventListener('touchcancel', end);
+  // עכבר (לבדיקה במחשב)
+  seek.addEventListener('mousedown', function (e) {
+    if (!begin(e.clientX)) return;
+    var mm = function (ev) { move(ev.clientX); }, mu = function () { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); end(); };
+    document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+  });
+  seek.addEventListener('click', function (e) { e.stopPropagation(); });
 }
 
 // תשובה מהאפליקציה על הורדה / שיתוף
@@ -878,6 +943,8 @@ function pollSync() {
   var s = syncStatus(); lastS = s;
   var d = describe(s);
   pill.classList.remove('ready', 'busy');
+  pillKey = d ? s.id + '|' + d.title : '';
+  if (d && pillKey === dismissed) d = null; // החליקו אותה הצידה — לא מציגים שוב את אותה הודעה
   if (d) {
     $('syncText').textContent = d.title; $('syncSub').textContent = stopNote(s, d);
     if (d.pct != null) $('syncBar').style.width = d.pct + '%';
@@ -913,7 +980,28 @@ $('updClose').addEventListener('click', function () { closeSheet(upd); });
 upd.addEventListener('click', function (e) { if (e.target === upd) closeSheet(upd); });
 $('updStop').addEventListener('click', stopSync);
 $('pillStop').addEventListener('click', function (e) { e.stopPropagation(); stopSync(); });
-pill.addEventListener('click', function () { if (pill.classList.contains('ready') && !lastS.error && !(lastS.msg)) location.reload(); else openUpdate(); });
+pill.addEventListener('click', function () {
+  if (swiped) { swiped = false; return; }
+  if (pill.classList.contains('ready') && !lastS.error && !(lastS.msg)) location.reload(); else openUpdate();
+});
+// החלקה הצידה סוגרת את ההודעה (כמו התראה)
+var pillKey = '', dismissed = get('vod_pill_dismissed', ''), swiped = false, sx = 0, dx = 0;
+pill.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; dx = 0; pill.classList.add('drag'); }, { passive: true });
+pill.addEventListener('touchmove', function (e) {
+  dx = e.touches[0].clientX - sx;
+  pill.style.transform = 'translate(calc(-50% + ' + dx + 'px),0)';
+  pill.style.opacity = String(Math.max(0.15, 1 - Math.abs(dx) / 220));
+}, { passive: true });
+pill.addEventListener('touchend', function () {
+  pill.classList.remove('drag');
+  if (Math.abs(dx) > 70) {
+    swiped = true;
+    pill.style.transition = 'transform .2s ease-out,opacity .2s';
+    pill.style.transform = 'translate(calc(-50% + ' + (dx > 0 ? 420 : -420) + 'px),0)'; pill.style.opacity = '0';
+    dismissed = pillKey; set('vod_pill_dismissed', dismissed);
+    setTimeout(function () { pill.classList.remove('show'); pill.style.transition = pill.style.transform = pill.style.opacity = ''; }, 220);
+  } else { pill.style.transform = pill.style.opacity = ''; if (Math.abs(dx) > 8) swiped = true; }
+});
 if (shownSync) { pollSync(); setInterval(pollSync, 1500); }
 
 // ---- חזרה (כפתור "אחורה" של אנדרואיד) ----
