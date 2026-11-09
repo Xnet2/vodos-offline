@@ -137,6 +137,22 @@ public class MainActivity extends Activity {
         JSONObject index = new JSONObject(read(best));
         JSONArray videos = index.optJSONArray("videos");
         if (videos == null) index.put("videos", videos = new JSONArray());
+        // "הבית" של הסרטונים: האחסון שבו נמצאים רובם (לא בהכרח איפה שה-index — אם המחשב העתיק פעם בטעות
+        // לזיכרון הפנימי). סרטון שנמצא רק באחסון השני מקבל כתובת מלאה (u)
+        File[] dirs = getExternalFilesDirs(null);
+        int bestCount = -1;
+        for (File d : dirs) {
+          if (d == null) continue;
+          int c = 0;
+          for (int i = 0; i < videos.length(); i++) if (new File(d, videos.getJSONObject(i).optString("f")).isFile()) c++;
+          if (c > bestCount) { bestCount = c; bestDir = d; }
+        }
+        for (int i = 0; i < videos.length(); i++) {
+          JSONObject v = videos.getJSONObject(i);
+          String f = v.optString("f");
+          if (new File(bestDir, f).isFile()) continue;
+          for (File d : dirs) if (d != null && new File(d, f).isFile()) { v.put("u", Uri.fromFile(new File(d, f)).toString()); break; }
+        }
         final Set<String> keep = new HashSet<>();
         keep.add(best.getName());
         for (int i = 0; i < videos.length(); i++) keep.add(videos.getJSONObject(i).optString("f"));
@@ -236,7 +252,11 @@ public class MainActivity extends Activity {
       File out = new File(thumbs(), f + ".jpg");
       if (out.length() > 0) return Uri.fromFile(out).toString();
       synchronized (pending) {
-        if (pending.add(f)) thumbQueue.execute(() -> makeThumb(new File(filesDir, f), out));
+        if (pending.add(f)) thumbQueue.execute(() -> {
+          File v = new File(filesDir, f);
+          if (!v.isFile()) for (File d : getExternalFilesDirs(null)) if (d != null && new File(d, f).isFile()) v = new File(d, f);
+          makeThumb(v, out);
+        });
       }
       return "";
     }

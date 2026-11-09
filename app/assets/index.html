@@ -471,7 +471,7 @@ function slide(v) {
   var name = srcName(v.s);
   el.innerHTML =
     // poster שקוף — אחרת אנדרואיד מציג סמל "נגן" אפור וענק עד שהסרטון נטען
-    '<video playsinline preload="none" poster="' + BLANK + '" data-src="' + esc(base + v.f) + '"></video>' +
+    '<video playsinline preload="none" poster="' + BLANK + '" data-src="' + esc(v.u || base + v.f) + '"></video>' +
     '<div class="loader"></div>' +
     '<img class="outrologo" src="logo.png" alt="">' +
     '<svg class="paused-ico" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13l10.5-6.5z"/></svg>' +
