@@ -23,17 +23,37 @@ final class Sync {
   static final class Status {
     boolean active, finished, stalled;
     int done, total, videos;
-    long id; // הזמן של קובץ ה-sync — מזהה את ההעתקה
+    long id; // הזמן של קובץ ה-sync (או של הודעת המצב) — מזהה את ההעתקה
+    // הודעת מצב מהמחשב לפני ההעתקה (status-*.json): "הנגן מחובר", "המחשב מוריד…", או שגיאה
+    boolean msg, error;
+    String title = "", text = "";
 
     String json() {
       return "{\"active\":" + active + ",\"finished\":" + finished + ",\"done\":" + done + ",\"total\":" + total
-          + ",\"videos\":" + videos + ",\"id\":" + id + "}";
+          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error
+          + ",\"title\":" + JSONObject.quote(title) + ",\"text\":" + JSONObject.quote(text) + "}";
     }
   }
 
   static Status read(Context ctx) {
     Status s = new Status();
-    File sync = newestSync(ctx);
+    File sync = newest(ctx, "sync"), st = newest(ctx, "status");
+    // הודעת מצב חדשה יותר מההעתקה האחרונה — המחשב עוד בשלב ההכנה (שני הזמנים לפי השעון של המחשב)
+    if (st != null && (sync == null || stamp(st) > stamp(sync))) {
+      try {
+        JSONObject o = new JSONObject(read(st));
+        s.msg = true;
+        s.id = stamp(st);
+        s.title = o.optString("title");
+        s.text = o.optString("text");
+        s.error = o.optBoolean("error") && System.currentTimeMillis() - st.lastModified() < 600000; // שגיאה ישנה כבר לא מעניינת
+        // אם כבר 3 דקות אין הודעה חדשה — התוכנה במחשב נעצרה או שהנגן נותק
+        s.active = !s.error && System.currentTimeMillis() - st.lastModified() < 180000;
+        return s;
+      } catch (Exception e) {
+        return new Status(); // הקובץ עוד נכתב
+      }
+    }
     if (sync == null) return s;
     s.id = stamp(sync);
     long newest = sync.lastModified();
@@ -55,15 +75,17 @@ final class Sync {
     return s;
   }
 
-  static File newestSync(Context ctx) {
-    File sync = null;
+  static File newestSync(Context ctx) { return newest(ctx, "sync"); }
+
+  static File newest(Context ctx, String prefix) {
+    File best = null;
     for (File dir : ctx.getExternalFilesDirs(null)) {
       if (dir == null) continue;
       File[] list = dir.listFiles();
       if (list == null) continue;
-      for (File f : list) if (f.getName().matches("sync-\\d+\\.json") && (sync == null || stamp(f) > stamp(sync))) sync = f;
+      for (File f : list) if (f.getName().matches(prefix + "-\\d+\\.json") && (best == null || stamp(f) > stamp(best))) best = f;
     }
-    return sync;
+    return best;
   }
 
   static boolean charging(Context ctx) {
@@ -75,8 +97,7 @@ final class Sync {
   private static final String CHANNEL = "sync";
   private static final int ID = 1;
 
-  static void notifyStatus(Context ctx, Status s) {
-    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+  private static Notification.Builder builder(Context ctx, NotificationManager nm) {
     Notification.Builder b;
     if (Build.VERSION.SDK_INT >= 26) {
       nm.createNotificationChannel(new NotificationChannel(CHANNEL, "העתקה מהמחשב", NotificationManager.IMPORTANCE_HIGH));
@@ -86,7 +107,30 @@ final class Sync {
     }
     PendingIntent open = PendingIntent.getActivity(ctx, 0,
         new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT);
-    b.setContentIntent(open).setOnlyAlertOnce(true);
+    return b.setContentIntent(open).setOnlyAlertOnce(true);
+  }
+
+  // הודעת מצב מהמחשב: בזמן ההכנה — התראה קבועה עם פס "עובד…"; שגיאה — התראה רגילה
+  static void notifyMsg(Context ctx, Status s) {
+    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    Notification.Builder b = builder(ctx, nm).setContentTitle(s.title).setContentText(s.text);
+    if (Build.VERSION.SDK_INT >= 16) b.setStyle(new Notification.BigTextStyle().bigText(s.text));
+    if (s.error) {
+      nm.cancel(ID);
+      b.setSmallIcon(android.R.drawable.stat_notify_error).setAutoCancel(true);
+    } else {
+      b.setSmallIcon(android.R.drawable.stat_sys_download).setProgress(0, 0, true).setOngoing(true);
+    }
+    nm.notify(ID, b.build());
+  }
+
+  static void cancel(Context ctx) {
+    ((NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE)).cancel(ID);
+  }
+
+  static void notifyStatus(Context ctx, Status s) {
+    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    Notification.Builder b = builder(ctx, nm);
     if (s.active) {
       b.setSmallIcon(android.R.drawable.stat_sys_download)
           .setContentTitle("מעתיק סרטונים מהמחשב")
@@ -117,8 +161,20 @@ final class Sync {
     android.content.SharedPreferences prefs = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
     long end = System.currentTimeMillis() + maxMs, seen = prefs.getLong("announced", 0);
     Status last = null;
+    String shown = null; // הודעת המצב שמוצגת עכשיו (כותרת+טקסט), כדי לא לעדכן סתם
     while (System.currentTimeMillis() < end) {
       Status s = read(ctx);
+      if (s.msg) {
+        String key = s.id + s.title + s.text;
+        if (s.active || (s.error && s.id > prefs.getLong("error", 0))) {
+          if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; }
+          if (s.error) prefs.edit().putLong("error", s.id).apply();
+        } else if (shown != null && !s.error) { cancel(ctx); shown = null; } // המחשב הפסיק לשלוח
+        if (!charging(ctx)) { if (s.active) cancel(ctx); return; }
+        try { Thread.sleep(1500); } catch (InterruptedException e) { return; }
+        continue;
+      }
+      shown = null;
       if (s.id > seen && (s.active || s.finished)) {
         notifyStatus(ctx, s);
         last = s;

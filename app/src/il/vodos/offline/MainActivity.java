@@ -156,12 +156,14 @@ public class MainActivity extends Activity {
             for (int i = 0; i < files.length(); i++) keep.add(files.getString(i));
           } catch (Exception e) {}
         }
+        File st = Sync.newest(MainActivity.this, "status");
+        if (st != null) keep.add(st.getName());
         final File dir = bestDir;
         new Thread(() -> {
           File[] list = dir.listFiles();
           if (list != null) for (File f : list) {
             String n = f.getName();
-            if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
+            if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
           }
         }).start();
         return "{\"base\":" + JSONObject.quote(Uri.fromFile(bestDir).toString() + "/") + ",\"index\":" + index + "}";

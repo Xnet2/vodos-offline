@@ -1,6 +1,7 @@
 ﻿# עבודה מול הנגן דרך MTP (הוא מתחבר כמכשיר נייד, בלי אות כונן), בעזרת Shell.Application של Windows.
 #   mtp.ps1 find                                → האם מחובר נגן עם אפליקציית VODOS, וכמה מקום פנוי בו
 #   mtp.ps1 state  -Local <תיקייה>              → אילו קבצים כבר בנגן, ומה כתוב ב-state האחרון של האפליקציה
+#   mtp.ps1 put    -Local <תיקייה> -List <שם>    → מעתיק לנגן קובץ אחד (הודעת מצב)
 #   mtp.ps1 push   -Local <תיקייה> -List <קובץ>  → מעתיק לנגן את הקבצים שברשימה ועוד לא נמצאים בו
 param(
   [Parameter(Position = 0)][string]$Action,
@@ -78,6 +79,19 @@ switch ($Action) {
       if ($text) { break }
     }
     Out-Json @{ have = $have; state = $text }
+  }
+
+  # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
+  'put' {
+    $s = Get-Storage
+    if (-not $s) { Out-Json @{ error = 'not connected' }; exit 1 }
+    $folder = Get-Path $s.GetFolder $Target
+    if (-not $folder) { Out-Json @{ error = 'no app folder' }; exit 1 }
+    $path = Join-Path $Local $List
+    $folder.CopyHere($path, 4 + 16 + 1024)
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline -and -not $folder.ParseName($List)) { Start-Sleep -Milliseconds 300 }
+    Out-Json @{ ok = [bool]$folder.ParseName($List) }
   }
 
   'push' {

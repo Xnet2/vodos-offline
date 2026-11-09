@@ -207,13 +207,39 @@ function faststart(path) {
   return true;
 }
 
-let refreshing = null;
+let refreshing = null, refreshError = null;
 let selection = null; // { videos, sources }
+let onDownload = null; // בזמן חיבור: מדווח לנגן על כל סרטון שהורד
 
 function refresh() {
-  if (!refreshing) refreshing = doRefresh().catch(e => log('שגיאה ברענון:', e.message)).finally(() => { refreshing = null; });
+  if (!refreshing) {
+    refreshError = null;
+    refreshing = doRefresh().catch(e => { refreshError = e; log('שגיאה ברענון:', e.message); }).finally(() => { refreshing = null; });
+  }
   return refreshing;
 }
+
+// ---- הודעות מצב לנגן: status-<זמן>.json, שהאפליקציה מציגה כהתראה ובפס שבפיד ----
+// {title, text, done?, error?} — נשלחות אחת-אחת; אם בינתיים הגיעה חדשה יותר, הביניים מדולגות
+const STATUS_DIR = join(HOME, 'status');
+let statusBusy = null, statusNext = null;
+function status(title, text, extra = {}) {
+  statusNext = { title, text, ...extra };
+  if (!statusBusy) statusBusy = (async () => {
+    while (statusNext) {
+      const s = statusNext; statusNext = null;
+      try {
+        mkdirSync(STATUS_DIR, { recursive: true });
+        for (const f of readdirSync(STATUS_DIR)) rmSync(join(STATUS_DIR, f), { force: true });
+        const name = 'status-' + Date.now() + '.json';
+        writeFileSync(join(STATUS_DIR, name), JSON.stringify(s));
+        await ps(['put', '-Local', STATUS_DIR, '-List', name]);
+      } catch {}
+    }
+    statusBusy = null;
+  })();
+}
+async function statusFlush() { while (statusBusy) await statusBusy; }
 
 async function doRefresh() {
   const cfg = await loadConfig();
@@ -231,7 +257,7 @@ async function doRefresh() {
       const name = nameOf(v), path = join(CACHE, name);
       if (!existsSync(path)) {
         if ((failed.get(v.videoUrl) || 0) > Date.now()) continue;
-        try { await download(v.videoUrl, path); fresh++; }
+        try { await download(v.videoUrl, path); fresh++; if (onDownload) onDownload(fresh); }
         catch (e) { failed.set(v.videoUrl, Date.now() + 6 * 3600 * 1000); continue; }
       }
       bytes += statSync(path).size;
@@ -311,16 +337,39 @@ async function push(free, have) {
 }
 
 async function syncDevice(dev) {
+  const KEEP = ' · אל תנתקו את הנגן';
+  status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
+  let last = 0;
+  onDownload = (n) => {
+    if (Date.now() - last < 8000) return; // לא להציף את הנגן בהודעות
+    last = Date.now();
+    status('המחשב מוריד סרטונים חדשים', `הורדו ${n} עד עכשיו` + KEEP);
+  };
   try {
     const tmp = join(HOME, 'from-device');
     mkdirSync(tmp, { recursive: true });
+    await statusFlush();
     const [st] = await ps(['state', '-Local', tmp]);
     if (st && st.error) throw new Error(st.error);
     const changed = st && st.state ? applyState(st.state) : false;
+    if (refreshing) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
     await refresh();
     if (changed || !selection) await refresh(); // הנפח במחשב השתנה — לבחור מחדש
-    await push(dev.free, (st && st.have) || []);
-  } catch (e) { log('שגיאה בהעתקה:', e.message); }
+    onDownload = null;
+    if (!selection) {
+      status('לא הצלחתי להוריד סרטונים', 'בדקו שיש אינטרנט במחשב, ונסו לחבר שוב', { error: true });
+      return;
+    }
+    status('מכין את ההעתקה לנגן…', (refreshError ? 'אין אינטרנט במחשב — מעתיק את מה שכבר הורד' : 'עוד רגע מתחילים') + KEEP);
+    await statusFlush();
+    await push(dev.free, (st && st.have) || []); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
+  } catch (e) {
+    log('שגיאה בהעתקה:', e.message);
+    status('ההעתקה נכשלה', 'נתקו וחברו שוב את הנגן', { error: true });
+  } finally {
+    onDownload = null;
+    await statusFlush();
+  }
 }
 
 // ---- לולאה ראשית ----

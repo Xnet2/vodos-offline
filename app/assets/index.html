@@ -57,6 +57,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .syncpill .track i{display:block;height:100%;width:0;background:linear-gradient(90deg,#25f4ee,#fe2c55);transition:width .4s}
 .syncpill.ready{color:var(--accent)}
 .syncpill.ready .track{display:none}
+/* בהכנה — פס שרץ הלוך ושוב, בלי אחוזים */
+.syncpill.busy .track i{width:35%!important;animation:busy 1.2s ease-in-out infinite alternate}
+@keyframes busy{from{transform:translateX(0)}to{transform:translateX(-186%)}}
 /* טבעת טעינה כמו באתר — מופיעה רק אם הטעינה באמת לוקחת זמן */
 .loader{position:absolute;z-index:3;width:44px;height:44px;border-radius:50%;border:7px solid #fff;pointer-events:none;opacity:0;transition:opacity .2s;animation:spin 1s linear infinite}
 .loader::before,.loader::after{content:"";position:absolute;top:-7px;left:-7px;right:-7px;bottom:-7px;border-radius:50%;border:7px solid;z-index:-1}
@@ -366,8 +369,12 @@ var shownSync = window.VODOS && VODOS.status ? syncStatus() : null;
 var loadedId = shownSync && shownSync.finished ? shownSync.id : 0; // העתקה שהסתיימה לפני שהפיד נטען — כבר בפנים
 function pollSync() {
   var s = syncStatus();
-  pill.classList.remove('ready');
-  if (s.active) {
+  pill.classList.remove('ready', 'busy');
+  if (s.msg && (s.active || s.error)) { // המחשב בשלב ההכנה (מחובר / מוריד…) או שגיאה
+    document.getElementById('syncText').textContent = s.title;
+    document.getElementById('syncSub').textContent = s.text;
+    pill.classList.add('show', s.error ? 'ready' : 'busy');
+  } else if (s.active) {
     document.getElementById('syncText').textContent = 'מעתיק סרטונים מהמחשב…';
     document.getElementById('syncSub').textContent = s.done + ' מתוך ' + s.total + ' · אל תנתקו את הנגן';
     document.getElementById('syncBar').style.width = (s.total ? s.done / s.total * 100 : 0) + '%';
