@@ -153,6 +153,7 @@ public class MainActivity extends Activity {
           if (new File(bestDir, f).isFile()) continue;
           for (File d : dirs) if (d != null && new File(d, f).isFile()) { v.put("u", Uri.fromFile(new File(d, f)).toString()); break; }
         }
+        enforceLimit(videos, bestDir, dirs);
         final Set<String> keep = new HashSet<>();
         keep.add(best.getName());
         for (int i = 0; i < videos.length(); i++) keep.add(videos.getJSONObject(i).optString("f"));
@@ -367,6 +368,61 @@ public class MainActivity extends Activity {
     } finally {
       try { r.release(); } catch (Exception e) {}
     }
+  }
+
+  // נפח מירבי לסרטונים בנגן (ההגדרה "נפח בנגן"): אם עוברים אותו — מוחקים קודם סרטונים שנצפו, ואחר כך
+  // את הישנים ביותר, עד שחוזרים מתחת למגבלה. "אהבתי" לא נספרים ולא נמחקים. מוחק גם מהרשימה שמוצגת
+  private void enforceLimit(JSONArray videos, File home, File[] dirs) {
+    try {
+      JSONObject st = state(home);
+      double gb = st.optJSONObject("settings") != null ? st.getJSONObject("settings").optDouble("deviceGB", 0) : 0;
+      if (gb <= 0) return;
+      long limit = (long) (gb * 1024 * 1024 * 1024);
+      Set<String> liked = new HashSet<>(), seen = new HashSet<>();
+      JSONArray l = st.optJSONArray("likes"), w = st.optJSONArray("watched");
+      if (l != null) for (int i = 0; i < l.length(); i++) liked.add(l.getJSONObject(i).optString("f"));
+      if (w != null) for (int i = 0; i < w.length(); i++) seen.add(w.getString(i));
+      List<JSONObject> cand = new ArrayList<>();
+      long total = 0;
+      for (int i = 0; i < videos.length(); i++) {
+        JSONObject v = videos.getJSONObject(i);
+        File f = find(v.optString("f"), home, dirs);
+        if (f == null || liked.contains(v.optString("f"))) continue;
+        total += f.length();
+        cand.add(v);
+      }
+      if (total <= limit) return;
+      // סדר מחיקה: נצפו קודם, ובתוך כל קבוצה — הישן ביותר קודם
+      java.util.Collections.sort(cand, (a, b) -> {
+        boolean sa = seen.contains(a.optString("f")), sb = seen.contains(b.optString("f"));
+        if (sa != sb) return sa ? -1 : 1;
+        return a.optString("ts").compareTo(b.optString("ts"));
+      });
+      Set<String> gone = new HashSet<>();
+      for (JSONObject v : cand) {
+        if (total <= limit) break;
+        File f = find(v.optString("f"), home, dirs);
+        long len = f.length();
+        if (f.delete()) { total -= len; gone.add(v.optString("f")); }
+      }
+      for (int i = videos.length() - 1; i >= 0; i--) if (gone.contains(videos.getJSONObject(i).optString("f"))) videos.remove(i);
+      Sync.log(this, "limit " + gb + "GB: deleted " + gone.size());
+    } catch (Exception e) {}
+  }
+
+  private static File find(String name, File home, File[] dirs) {
+    File f = new File(home, name);
+    if (f.isFile()) return f;
+    for (File d : dirs) if (d != null && new File(d, name).isFile()) return new File(d, name);
+    return null;
+  }
+
+  // קובץ ה-state האחרון (אהבתי / נצפו / הגדרות)
+  private static JSONObject state(File dir) {
+    File best = null;
+    File[] list = dir.listFiles();
+    if (list != null) for (File f : list) if (f.getName().matches("state-\\d+\\.json") && (best == null || stamp(f) > stamp(best))) best = f;
+    try { return new JSONObject(read(best)); } catch (Exception e) { return new JSONObject(); }
   }
 
   // הסרטונים שסומנו "אהבתי", מקובץ ה-state האחרון: [{f,s,t,ts}, …]

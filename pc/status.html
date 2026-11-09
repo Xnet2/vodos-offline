@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VODOS — מצב</title>
+<!-- חלון המצב של "VODOS לנגן" במחשב: מה קורה עכשיו (אותה הודעה שמוצגת בנגן), הנגן, המחשב, והיומן -->
+<style>
+:root{--bg:#f4f4f6;--card:#fff;--ink:#161823;--gray:#8a8b91;--line:#eceef1;--accent:#fe2c55;--cyan:#25f4ee;--ok:#18a058}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",Assistant,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;border:0;cursor:pointer}
+.wrap{max-width:760px;margin:0 auto;padding:28px 18px 40px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.logo{position:relative;width:46px;height:46px;flex:none;isolation:isolate}
+.logo i{position:absolute;inset:6px;border-radius:50%;border:6px solid var(--ink)}
+.logo i::before,.logo i::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:6px solid;z-index:-1}
+.logo i::before{border-color:var(--cyan);transform:translate(-3px,-3px)}
+.logo i::after{border-color:var(--accent);transform:translate(3px,3px)}
+header h1{font-size:22px;font-weight:800}
+header p{font-size:14px;color:var(--gray)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:6px;vertical-align:middle}
+.dot.off{background:#c8c9cd}
+
+.main{display:flex;align-items:center;gap:18px;padding:22px;border-radius:18px;background:var(--card);box-shadow:0 2px 12px rgba(0,0,0,.05)}
+.main .ic{flex:none;width:64px;height:64px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center}
+.main .ic svg{width:32px;height:32px}
+.main.busy .ic svg{animation:spin 1.4s linear infinite}
+.main.done .ic{background:#e7f6ee;color:var(--ok)}
+.main.err .ic{background:#ffe9ee;color:var(--accent)}
+.main .tx{flex:1;min-width:0}
+.main h2{font-size:21px;font-weight:800;margin-bottom:3px}
+.main p{font-size:15px;color:var(--gray)}
+.track{height:8px;margin-top:12px;border-radius:4px;background:var(--line);overflow:hidden}
+.track i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,var(--cyan),var(--accent));transition:width .5s}
+.track.ind i{width:35%;animation:ind 1.2s ease-in-out infinite alternate}
+.stop{flex:none;padding:11px 20px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px}
+.stop[disabled]{opacity:.5;cursor:default}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.card{padding:16px;border-radius:16px;background:var(--card);box-shadow:0 2px 12px rgba(0,0,0,.05)}
+.card h3{font-size:13px;color:var(--gray);font-weight:700;margin-bottom:8px}
+.card b{display:block;font-size:19px;font-weight:800}
+.card small{display:block;font-size:13px;color:var(--gray);margin-top:3px;line-height:1.5}
+.note{margin-top:14px;font-size:13.5px;color:var(--gray);line-height:1.6}
+details{margin-top:14px;border-radius:16px;background:var(--card);box-shadow:0 2px 12px rgba(0,0,0,.05);overflow:hidden}
+summary{padding:14px 16px;font-weight:700;cursor:pointer}
+.log{max-height:320px;overflow:auto;padding:0 16px 14px;font:12.5px/1.65 Consolas,monospace;color:#444;white-space:pre-wrap;direction:rtl}
+.down{display:none;margin-bottom:14px;padding:14px 16px;border-radius:14px;background:#ffe9ee;color:#a1122f;font-weight:700}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes ind{from{transform:translateX(0)}to{transform:translateX(-186%)}}
+@media (max-width:620px){.grid{grid-template-columns:1fr}.main{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><i></i></div>
+    <div><h1>VODOS לנגן</h1><p id="run"><span class="dot"></span>התוכנה פועלת ברקע</p></div>
+  </header>
+  <div class="down" id="down">התוכנה במחשב לא עונה. הפעילו מחדש את המחשב או הריצו שוב את install.cmd.</div>
+
+  <section class="main" id="main">
+    <div class="ic" id="ic"></div>
+    <div class="tx">
+      <h2 id="title">…</h2><p id="text"></p>
+      <div class="track" id="track" hidden><i id="bar"></i></div>
+    </div>
+    <button class="stop" id="stop" hidden>עצור</button>
+  </section>
+
+  <div class="grid">
+    <div class="card"><h3>הנגן</h3><b id="dev">—</b><small id="devSub"></small></div>
+    <div class="card"><h3>במחשב</h3><b id="pc">—</b><small id="pcSub"></small></div>
+    <div class="card"><h3>עדכון אחרון</h3><b id="last">—</b><small id="lastSub"></small></div>
+  </div>
+  <p class="note" id="settings"></p>
+
+  <details><summary>יומן</summary><div class="log" id="log"></div></details>
+</div>
+<script>
+var SYNC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg>';
+var OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+var ERR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>';
+var USB = '<svg viewBox="0 0 24 24" fill="none" stroke="#8a8b91" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="7" rx="1.5"/><path d="M12 9.5V21M8 13l4 3 4-3"/></svg>';
+function $(id) { return document.getElementById(id); }
+function gb(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + 'GB' : Math.round(b / 1048576) + 'MB'; }
+function ago(iso) {
+  var m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (!(m >= 0)) return '';
+  if (m < 1) return 'עכשיו'; if (m < 60) return 'לפני ' + m + ' דק׳';
+  var h = Math.round(m / 60); if (h < 24) return h === 1 ? 'לפני שעה' : 'לפני ' + h + ' שעות';
+  var d = Math.round(h / 24); return d === 1 ? 'אתמול' : 'לפני ' + d + ' ימים';
+}
+var lastIcon = '';
+function render(s) {
+  $('down').style.display = 'none';
+  var main = $('main'), title, text, icon, cls = '';
+  if (s.busy || (s.connected && s.title)) {
+    title = s.title || 'הנגן מחובר'; text = s.text || '';
+    if (s.error) { icon = ERR; cls = 'err'; } else if (!s.busy) { icon = OK; cls = 'done'; } else { icon = SYNC; cls = 'busy'; }
+  } else if (s.connected) { title = 'הנגן מחובר'; text = 'בודק…'; icon = SYNC; cls = 'busy'; }
+  else { title = 'מחכה לנגן'; text = 'חברו את הנגן בכבל USB — העדכון יתחיל לבד'; icon = USB; }
+  main.className = 'main ' + cls;
+  if (icon !== lastIcon) { $('ic').innerHTML = icon; lastIcon = icon; }
+  $('title').textContent = title; $('text').textContent = text;
+  var showTrack = s.busy && !s.error;
+  $('track').hidden = !showTrack;
+  $('track').classList.toggle('ind', showTrack && !s.total);
+  $('bar').style.width = s.total ? (s.done / s.total * 100) + '%' : '';
+  $('stop').hidden = !s.busy; $('stop').disabled = !!s.stopping; $('stop').textContent = s.stopping ? 'עוצר…' : 'עצור';
+
+  $('dev').textContent = s.connected ? 'מחובר' + (s.device ? ' · ' + s.device : '') : 'לא מחובר';
+  $('devSub').textContent = s.connected && s.storage ? 'מעתיק ל: ' + s.storage + (s.free ? ' · פנוי ' + gb(s.free) : '') : '';
+  $('pc').textContent = s.cache ? s.cache.videos + ' סרטונים' : '—';
+  $('pcSub').textContent = (s.cache ? gb(s.cache.bytes) + ' מתוך ' + s.settings.pcGB + 'GB' : '') + (s.downloading ? ' · מוריד עכשיו…' : '');
+  $('last').textContent = s.last ? ago(s.last.at) : 'עוד לא היה';
+  $('lastSub').textContent = s.last ? (s.last.copied ? 'נוספו ' + s.last.copied + ' סרטונים' : 'לא היו סרטונים חדשים') + ' · ' + s.last.videos + ' בנגן' : '';
+  $('settings').textContent = 'נפח במחשב ' + s.settings.pcGB + 'GB · נפח מירבי בנגן ' + s.settings.deviceGB + 'GB · ' + s.likes + ' אהבתי · ' + s.watched + ' נצפו. משנים את הנפח בהגדרות באפליקציה שבנגן.';
+  var log = $('log'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+  log.textContent = s.log.join('\n');
+  if (atEnd) log.scrollTop = log.scrollHeight;
+}
+function poll() {
+  fetch('/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render).catch(function () {
+    $('down').style.display = 'block';
+    $('run').innerHTML = '<span class="dot off"></span>התוכנה לא עונה';
+  });
+}
+$('stop').addEventListener('click', function () { $('stop').disabled = true; $('stop').textContent = 'עוצר…'; fetch('/stop', { method: 'POST' }).then(poll); });
+poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>

@@ -14,6 +14,7 @@ if not exist "%SRC%sync.mjs" (
   mkdir "%TEMP%\VODOS-PC" 2>nul
   curl.exe -sfL -o "%TEMP%\VODOS-PC\sync.mjs" https://raw.githubusercontent.com/Xnet2/vodos-offline/main/pc/sync.mjs
   curl.exe -sfL -o "%TEMP%\VODOS-PC\mtp.ps1" https://raw.githubusercontent.com/Xnet2/vodos-offline/main/pc/mtp.ps1
+  curl.exe -sfL -o "%TEMP%\VODOS-PC\status.html" https://raw.githubusercontent.com/Xnet2/vodos-offline/main/pc/status.html
 )
 if not exist "%SRC%sync.mjs" (
   echo.
@@ -24,6 +25,7 @@ if not exist "%SRC%sync.mjs" (
 )
 copy /y "%SRC%sync.mjs" "%DEST%\" >nul || (echo לא הצלחתי להעתיק את sync.mjs & pause & exit /b 1)
 copy /y "%SRC%mtp.ps1" "%DEST%\" >nul || (echo לא הצלחתי להעתיק את mtp.ps1 & pause & exit /b 1)
+copy /y "%SRC%status.html" "%DEST%\" >nul 2>&1
 for /f "delims=" %%n in ('where node 2^>nul') do set "NODE=%%n" & goto found
 rem אין Node.js — מתקינים אותו (התוכנה כתובה ב-Node)
 echo מתקין Node.js...
@@ -37,6 +39,9 @@ for %%i in ("%NODE%") do set "SNODE=%%~si"
 set "VBS=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VODOS-M36.vbs"
 > "%VBS%" echo CreateObject("WScript.Shell").Run """%SNODE%"" ""%SSYNC%""", 0, False
 wscript "%VBS%"
+rem קיצור "VODOS" על שולחן העבודה — חלון המצב (מה קורה עכשיו, הנגן, היומן)
+powershell -NoProfile -Command "$d=[Environment]::GetFolderPath('Desktop'); Set-Content -Path (Join-Path $d 'VODOS.url') -Value '[InternetShortcut]','URL=http://127.0.0.1:47800/' -Encoding ASCII" >nul 2>&1
 echo הותקן. התוכנה רצה עכשיו ברקע, ותופעל אוטומטית בכל הפעלה של המחשב.
-echo יומן: %LOCALAPPDATA%\VODOS-M36\vodos-log.txt
-timeout /t 8
+echo חלון המצב נפתח עכשיו בדפדפן. אפשר לפתוח אותו שוב מהקיצור VODOS על שולחן העבודה.
+timeout /t 4 >nul
+start "" http://127.0.0.1:47800/

@@ -106,6 +106,7 @@ function Get-AppFolder {
 # האם ביקשו בנגן לעצור את החיבור הזה: הקובץ stop-<מזהה החיבור>.txt (חיפוש ישיר לפי שם, בתיקייה טרייה)
 function Test-Stop {
   if (-not $Session) { return $false }
+  if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "VODOS-M36\stop-$Session.flag")) { return $true }  # עצירה מהחלון במחשב
   $folder = Get-AppFolder
   if (-not $folder) { return $false }
   $n = "stop-$Session.txt"

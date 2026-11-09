@@ -7,6 +7,7 @@
 // שימוש:  node sync.mjs          (ברקע, כמו בהפעלה האוטומטית)
 //         node sync.mjs --once   (סנכרון אחד עכשיו, אם הנגן מחובר)
 import { createHash } from 'node:crypto';
+import http from 'node:http';
 import { setDefaultResultOrder } from 'node:dns';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -29,9 +30,17 @@ const HOME = join(process.env.LOCALAPPDATA || here, 'VODOS-M36');
 const CACHE = join(HOME, 'videos');
 mkdirSync(CACHE, { recursive: true });
 
+// ---- מצב לחלון "VODOS — מצב" במחשב (http://127.0.0.1:47800) ----
+const ui = {
+  connected: false, device: '', storage: '', free: 0,
+  busy: false, title: '', text: '', error: false, done: 0, total: 0,
+  last: null, log: [],
+};
+
 function log(...a) {
   const line = new Date().toLocaleString('he-IL') + '  ' + a.join(' ');
   console.log(line);
+  ui.log.push(line); if (ui.log.length > 80) ui.log.shift();
   // אם log.txt נעול או חסום לכתיבה — ממשיכים ביומן חלופי, העיקר לא לעצור
   for (const name of ['vodos-log.txt', 'vodos-log2.txt']) { try { appendFileSync(join(HOME, name), line + '\n'); return; } catch {} }
 }
@@ -270,6 +279,7 @@ function refresh() {
 const STATUS_DIR = join(HOME, 'status');
 let statusBusy = null, statusNext = null;
 function status(title, text, extra = {}) {
+  Object.assign(ui, { title, text, error: !!extra.error, done: 0, total: 0 }); // אותה הודעה גם בחלון במחשב
   statusNext = { title, text, session, ...extra };
   if (!statusBusy) statusBusy = (async () => {
     while (statusNext) {
@@ -378,21 +388,29 @@ async function push(free, have) {
 
   // ההתקדמות מוצגת בנגן עצמו: mtp.ps1 שולח קודם רשימה (sync-*.json), והאפליקציה סופרת מה כבר הגיע
   log(`מעתיק לנגן (${videos.length} סרטונים ברשימה, ${(used / GB).toFixed(2)}GB, ועוד ${keepLiked.length} אהבתי)…`);
-  const out = await ps(['push', '-Local', CACHE, '-List', list]);
+  const out = await ps(['push', '-Local', CACHE, '-List', list], (o) => {
+    // ההתקדמות גם בחלון במחשב
+    if (o.todo != null) Object.assign(ui, { title: 'מעתיק סרטונים לנגן', text: o.todo ? `0 מתוך ${o.todo}` : 'אין קבצים חדשים להעתיק', done: 0, total: o.todo });
+    if (o.file) Object.assign(ui, { done: o.done, text: `${o.done} מתוך ${ui.total}` });
+  });
   const err = out.find(o => o.error);
   if (err) throw new Error(err.error);
   if (out.some(o => o.timeout)) throw new Error('ההעתקה נתקעה');
   const stopped = out.find(o => o.stopped);
-  if (stopped) { stopRequested = true; log(`ההעתקה הופסקה מהנגן (${stopped.copied} קבצים הועתקו)`); return; }
+  if (stopped) { stopRequested = true; log(`ההעתקה הופסקה (${stopped.copied} קבצים הועתקו)`); return; }
   const copied = out.filter(o => o.file && o.ok && /\.(mp4|mov|m4v|webm)$/.test(o.file)).length;
   const bad = out.filter(o => o.file && !o.ok).length;
   log(`הועתקו ${copied} סרטונים חדשים` + (bad ? `, ${bad} נכשלו` : ''));
+  ui.last = { at: new Date().toISOString(), copied, videos: videos.length + keepLiked.length };
+  saveJSON('last.json', ui.last);
+  Object.assign(ui, { title: 'הנגן מעודכן ✓', text: copied ? `נוספו ${copied} סרטונים חדשים` : 'אין סרטונים חדשים', error: false, done: 0, total: 0 });
 }
 
 async function syncDevice(dev) {
   const KEEP = ' · אל תנתקו את הנגן';
   stopRequested = false;
   session = Date.now().toString(36); // מזהה החיבור — נשלח בכל הודעה; עצירה בנגן נכתבת כ-stop-<מזהה>.txt
+  ui.busy = true;
   status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
   let last = 0, stopTimer = null, checking = null;
   // בדיקה אחת אם ביקשו בנגן לעצור (בדיקות לא חופפות: אם יש אחת באוויר — מחכים לה)
@@ -418,6 +436,7 @@ async function syncDevice(dev) {
     const [st] = await ps(['state', '-Local', tmp]);
     if (st && st.error) throw new Error(st.error);
     if (st && st.timeout) throw new Error('קריאה מהנגן נתקעה');
+    Object.assign(ui, { storage: st.storage || '', free: st.free || 0 });
     if (st.hasIndex && st.storage !== storagePref) { storagePref = st.storage; saveJSON('storage2.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
     const changed = st && st.state ? applyState(st.state) : false;
     // עצירה נבדקת: עכשיו, כל 5 שניות בזמן ההורדה, לפני ההעתקה, ולפני כל קובץ בהעתקה (ב-mtp.ps1)
@@ -448,7 +467,38 @@ async function syncDevice(dev) {
     onDownload = null;
     await statusFlush();
     stopRequested = false;
+    ui.busy = false;
+    rm(stopFlag());
   }
+}
+
+// ---- חלון המצב במחשב: http://127.0.0.1:47800 (קיצור "VODOS" על שולחן העבודה) ----
+// עצירה מהחלון: קובץ stop-<מזהה החיבור>.flag במחשב — mtp.ps1 בודק גם אותו, כמו את בקשת העצירה מהנגן
+function stopFlag() { return join(HOME, `stop-${session}.flag`); }
+function startServer() {
+  const page = join(here, 'status.html');
+  http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/stop') {
+      if (ui.busy && !stopRequested) {
+        try { writeFileSync(stopFlag(), ''); } catch {}
+        stopRequested = true; log('עצירה מהחלון במחשב'); status('עוצר את העדכון…', 'עוד רגע');
+      }
+      res.writeHead(204); return res.end();
+    }
+    if (req.url === '/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({
+        ...ui, stopping: stopRequested, settings, likes: likes.length, watched: watched.size,
+        cache: selection ? { videos: selection.videos.length, bytes: selection.videos.reduce((a, v) => { try { return a + statSync(join(CACHE, v.f)).size; } catch { return a; } }, 0) } : null,
+        downloading: !!refreshing,
+      }));
+    }
+    if (req.url === '/' || req.url.startsWith('/?')) {
+      try { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(readFileSync(page)); }
+      catch { res.writeHead(500); return res.end('status.html missing'); }
+    }
+    res.writeHead(404); res.end();
+  }).on('error', (e) => log('חלון המצב לא עלה:', e.code || e.message)).listen(47800, '127.0.0.1');
 }
 
 // ---- לולאה ראשית ----
@@ -466,11 +516,15 @@ async function main() {
     await syncDevice(dev);
     return;
   }
+  ui.last = loadJSON('last.json', null);
+  startServer();
   refresh();
   setInterval(refresh, REFRESH_MS);
   let wasConnected = false;
   for (;;) {
     const dev = await findDevice();
+    ui.connected = !!dev; ui.device = dev ? dev.device : '';
+    if (!dev && wasConnected) Object.assign(ui, { title: '', text: '', error: false, done: 0, total: 0 }); // נותק
     if (dev && !wasConnected) {
       log('מכשיר חובר: ' + dev.device);
       await syncDevice(dev);

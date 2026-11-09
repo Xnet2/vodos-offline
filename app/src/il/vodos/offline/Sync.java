@@ -190,7 +190,7 @@ final class Sync {
 
   // ---- התראות ----
   private static final String CHANNEL = "sync";
-  private static final int ID = 1;
+  static final int ID = 1;
 
   private static Notification.Builder builder(Context ctx, NotificationManager nm) {
     Notification.Builder b;
@@ -227,6 +227,14 @@ final class Sync {
       if (!s.waiting) stopAction(ctx, b, s);
     }
     nm.notify(ID, b.build());
+  }
+
+  // ההתראה של השירות הקדמי ברגע החיבור, עד שמגיעה הודעה מהמחשב
+  static Notification connectedNotification(Context ctx) {
+    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    return builder(ctx, nm).setSmallIcon(android.R.drawable.stat_sys_download)
+        .setContentTitle("הנגן מחובר").setContentText("מחכה לתוכנה במחשב…")
+        .setProgress(0, 0, true).setOngoing(true).build();
   }
 
   static void cancel(Context ctx) {
@@ -267,7 +275,10 @@ final class Sync {
 
   // רק מעקב אחד בכל רגע (גם החיבור לחשמל וגם ה-JobScheduler יכולים להפעיל אותו)
   // אם כבר יש מעקב — מחכים שיסתיים (ולא חוזרים מיד, אחרת ה-JobScheduler מריץ את העבודה שוב ושוב)
-  static void watch(Context ctx, long maxMs) {
+  static void watch(Context ctx, long maxMs) { watch(ctx, maxMs, null); }
+
+  // onFinal (מהשירות הקדמי): נקרא רגע לפני ההתראה הסופית (מעודכן / נעצר / שגיאה) — ואז המעקב מסתיים
+  static void watch(Context ctx, long maxMs, Runnable onFinal) {
     long end = System.currentTimeMillis() + maxMs;
     while (!watching.compareAndSet(false, true)) {
       if (System.currentTimeMillis() > end || !charging(ctx)) return;
@@ -275,12 +286,12 @@ final class Sync {
     }
     NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
     log(ctx, "watch start, charging=" + charging(ctx) + ", notifications=" + (Build.VERSION.SDK_INT >= 24 ? nm.areNotificationsEnabled() : true));
-    try { watchLoop(ctx, end - System.currentTimeMillis()); }
+    try { watchLoop(ctx, end - System.currentTimeMillis(), onFinal); }
     catch (Throwable t) { log(ctx, "watch error: " + t); }
     finally { watching.set(false); log(ctx, "watch end, charging=" + charging(ctx)); }
   }
 
-  private static void watchLoop(Context ctx, long maxMs) {
+  private static void watchLoop(Context ctx, long maxMs, Runnable onFinal) {
     android.content.SharedPreferences prefs = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
     long end = System.currentTimeMillis() + maxMs, seen = prefs.getLong("announced", 0);
     Status last = null;
@@ -289,9 +300,15 @@ final class Sync {
       Status s = read(ctx);
       if (s.msg) {
         String key = s.id + s.title + s.text + s.stopping + s.stopSlow;
-        if (s.active || (s.error && s.id > prefs.getLong("error", 0))) {
+        if (s.error && s.id > prefs.getLong("error", 0)) {
+          // הודעה סופית (נעצר / נכשל)
+          prefs.edit().putLong("error", s.id).apply();
+          if (onFinal != null) onFinal.run();
+          notifyMsg(ctx, s); log(ctx, "notify msg: " + s.title + " / " + s.text);
+          if (onFinal != null) return;
+          shown = key;
+        } else if (s.active) {
           if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; log(ctx, "notify msg: " + s.title + " / " + s.text); }
-          if (s.error) prefs.edit().putLong("error", s.id).apply();
         } else if (shown != null && !s.error) { cancel(ctx); shown = null; } // המחשב הפסיק לשלוח
         if (!charging(ctx)) { if (s.active) cancel(ctx); return; }
         try { Thread.sleep(1500); } catch (InterruptedException e) { return; }
@@ -300,13 +317,20 @@ final class Sync {
       shown = null;
       if (s.id > seen && (s.active || s.finished)) {
         if (last == null || last.finished != s.finished) log(ctx, "notify copy: " + s.json());
+        if (s.finished && onFinal != null) onFinal.run();
         notifyStatus(ctx, s);
         last = s;
-        if (s.finished) { seen = s.id; prefs.edit().putLong("announced", seen).apply(); last = null; }
+        if (s.finished) {
+          seen = s.id; prefs.edit().putLong("announced", seen).apply(); last = null;
+          if (onFinal != null) return;
+        }
       } else if (s.stalled && last != null && last.id == s.id) {
+        if (onFinal != null) onFinal.run();
         notifyStopped(ctx, last); last = null;
+        if (onFinal != null) return;
       }
       if (!charging(ctx)) {
+        if (onFinal != null) onFinal.run();
         if (last != null && last.active) notifyStopped(ctx, last);
         return;
       }
