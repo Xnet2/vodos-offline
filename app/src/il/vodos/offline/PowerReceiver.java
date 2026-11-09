@@ -17,6 +17,12 @@ public class PowerReceiver extends BroadcastReceiver {
     try { ctx.startService(new Intent(ctx, Watch.class)); } catch (Exception e) { Sync.log(ctx, "startService failed: " + e); }
   }
 
+  // הכפתור "עצור" בהתראה
+  public static class Stop extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context ctx, Intent intent) { Sync.requestStop(ctx); }
+  }
+
   public static class Watch extends Service {
     private volatile boolean running;
 

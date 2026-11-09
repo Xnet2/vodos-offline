@@ -4,47 +4,58 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>VODOS</title>
-<!-- הפיד של VODOS לנגן, בלי אינטרנט: אותו עיצוב כמו האתר, מהסרטונים שבתיקייה של האפליקציה -->
+<!-- VODOS לנגן, בלי אינטרנט: פיד בסגנון טיקטוק מהסרטונים שבתיקייה של האפליקציה, עם סרגל תחתון ודפים -->
 <style>
 /* Assistant — מקובץ בתוך האפליקציה (כל המשקלים, 29KB), כדי שיעבוד בלי אינטרנט */
 @font-face{font-family:Assistant;font-style:normal;font-weight:400 800;font-display:swap;src:url(assistant-hebrew.woff2) format("woff2");unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F}
 @font-face{font-family:Assistant;font-style:normal;font-weight:400 800;font-display:swap;src:url(assistant-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-:root{--bg:#000;--fg:#fff;--muted:rgba(255,255,255,.75);--accent:#fe2c55;--ink:#161823}
+:root{--bg:#000;--fg:#fff;--muted:rgba(255,255,255,.75);--accent:#fe2c55;--cyan:#25f4ee;--ink:#161823;--gray:#8a8b91;--line:#eceef1;--nav:54px}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:#000;color:var(--fg);font-family:Assistant,"Segoe UI",Roboto,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button,input{font:inherit;color:inherit;background:none;border:0;outline:0}
+button{cursor:pointer}
 [hidden]{display:none!important}
 .phone{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg)}
+svg{display:block}
 
-.top{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;padding:12px 12px 16px;background:linear-gradient(rgba(0,0,0,.3),rgba(0,0,0,0));pointer-events:none}
-.srcbtn{display:flex;align-items:center;gap:1px;height:30px;padding:0 4px 0 2px;border-radius:999px;font-weight:700;font-size:14.5px;text-shadow:0 1px 2px rgba(0,0,0,.35);pointer-events:auto}
-.srcbtn span{max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.srcbtn svg{width:20px;height:20px;transition:transform .2s}
-.srcbtn[aria-expanded=true] svg{transform:rotate(-90deg)}
-.feedtabs{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:14px;pointer-events:auto}
-.feedtabs button{position:relative;padding:5px 0 7px;font-size:15.5px;font-weight:700;color:rgba(255,255,255,.62);text-shadow:0 1px 2px rgba(0,0,0,.35)}
+/* ---- ראש: חיפוש משמאל, לשוניות באמצע (כמו טיקטוק) ---- */
+.top{position:absolute;top:0;left:0;right:0;z-index:20;height:64px;background:linear-gradient(rgba(0,0,0,.32),rgba(0,0,0,0));pointer-events:none}
+.searchbtn{position:absolute;left:10px;top:10px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.searchbtn svg{width:27px;height:27px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.feedtabs{position:absolute;left:50%;top:10px;transform:translateX(-50%);display:flex;gap:20px;pointer-events:auto}
+.feedtabs button{position:relative;padding:6px 0 9px;font-size:17.5px;font-weight:800;color:rgba(255,255,255,.62);text-shadow:0 1px 2px rgba(0,0,0,.35)}
 .feedtabs button[aria-selected=true]{color:#fff}
-.feedtabs button[aria-selected=true]::after{content:"";position:absolute;bottom:0;left:50%;width:18px;height:2.5px;margin-left:-9px;border-radius:2px;background:#fff}
-.menu{position:absolute;top:50px;right:12px;z-index:25;min-width:170px;max-height:70%;overflow-y:auto;padding:6px;background:#fff;color:var(--ink);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.22);display:flex;flex-direction:column}
-.tab{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 12px;border-radius:10px;font-size:15.5px;font-weight:600;text-align:start;white-space:nowrap}
-.tab[aria-checked=true]{color:var(--accent)}
+.feedtabs button[aria-selected=true]::after{content:"";position:absolute;bottom:0;left:50%;width:26px;height:3px;margin-left:-13px;border-radius:2px;background:#fff;animation:grow .22s ease-out}
+.filterchip{position:absolute;top:56px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;max-width:80%;padding:5px 8px 5px 12px;border-radius:999px;background:rgba(0,0,0,.45);font-size:13.5px;font-weight:700;white-space:nowrap;pointer-events:auto;animation:fadein .25s}
+.filterchip span{overflow:hidden;text-overflow:ellipsis}
+.filterchip i{display:flex;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);align-items:center;justify-content:center;font-style:normal;font-size:12px}
 
-.feed{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;overscroll-behavior:contain}
+/* ---- הפיד ---- */
+.feed{position:absolute;top:0;left:0;right:0;bottom:var(--nav);overflow-y:scroll;scroll-snap-type:y mandatory;overscroll-behavior:contain}
 .feed::-webkit-scrollbar{display:none}
 .slide{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
 .slide video{position:relative;width:100%;height:100%;object-fit:cover;transition:filter .28s ease-out,transform .28s ease-out}
 .slide.landscape video{object-fit:contain}
-.shade{position:absolute;left:0;right:0;bottom:0;height:38%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.42));pointer-events:none}
-.info{position:absolute;right:14px;left:68px;bottom:18px;z-index:2;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.shade{position:absolute;left:0;right:0;bottom:0;height:42%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.45));pointer-events:none}
+.info{position:absolute;right:12px;left:76px;bottom:14px;z-index:2;text-shadow:0 1px 2px rgba(0,0,0,.4)}
 .who{display:flex;align-items:baseline;gap:6px;margin-bottom:4px}
-.who b{font-size:16.5px;font-weight:700}
+.who b{display:inline-block;font-size:17px;font-weight:800;cursor:pointer}
 .who time{font-size:13.5px;color:var(--muted)}
 .title{font-size:15px;line-height:1.38;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .title b{font-weight:800}
 .title.open{display:block;-webkit-line-clamp:unset;max-height:42vh;overflow-y:auto}
-.side{position:absolute;left:8px;bottom:22px;z-index:2}
-.avatar{position:relative;width:44px;height:44px;border-radius:50%;border:1px solid #fff;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--ink);font-weight:700;font-size:18px}
-.avatar img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#fff}
+/* עמודת הכפתורים בצד (כמו בטיקטוק): ערוץ, אהבתי, הורדה, שיתוף */
+.side{position:absolute;left:6px;bottom:16px;z-index:2;display:flex;flex-direction:column;align-items:center;gap:14px;width:60px}
+.avatar{position:relative;width:48px;height:48px;border-radius:50%;border:1.5px solid #fff;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--ink);font-weight:800;font-size:19px;margin-bottom:8px}
+.avatar img{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#fff}
+.avatar::after{content:"";position:absolute;left:50%;bottom:-9px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6l6 6-6 6' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;transform:scaleX(-1)}
+.act{display:flex;flex-direction:column;align-items:center;font-size:12.5px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.45)}
+.act svg{width:36px;height:36px;fill:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));transition:transform .15s}
+.act span{margin-top:2px}
+.like[aria-pressed=true] svg{fill:var(--accent)}
+.like.pop svg{animation:pop .35s cubic-bezier(.3,1.6,.5,1)}
+.dl[aria-pressed=true] svg{fill:var(--cyan)}
+.dl.busy svg{animation:pulse .8s ease-in-out infinite alternate}
 .slide.outro video{filter:blur(22px) brightness(.7);transform:scale(1.08)}
 .outrologo{position:absolute;z-index:2;width:62%;max-width:300px;pointer-events:none;opacity:0;transform:scale(.84);transition:opacity .15s,transform .15s}
 .slide.outro .outrologo{opacity:1;transform:none;transition:opacity .48s cubic-bezier(.33,1,.68,1) .12s,transform .48s cubic-bezier(.33,1,.68,1) .12s}
@@ -52,128 +63,270 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .slide.paused .paused-ico{opacity:.7}
 .bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.25);z-index:3;pointer-events:none}
 .bar i{display:block;height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:right center}
-/* העתקה מהמחשב: גלולה לבנה מתחת לראש, עם פס התקדמות; בסוף — "נוספו X סרטונים · הצג" */
-.syncpill{position:absolute;z-index:24;top:58px;left:50%;transform:translate(-50%,-12px);min-width:200px;max-width:86%;padding:8px 14px 9px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13.5px;font-weight:700;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .3s}
-.syncpill.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
-.syncpill small{display:block;margin-top:1px;font-size:12px;font-weight:600;color:#8a8b91}
-.syncpill .track{height:4px;margin-top:7px;border-radius:2px;background:#eceef1;overflow:hidden}
-.syncpill .track i{display:block;height:100%;width:0;background:linear-gradient(90deg,#25f4ee,#fe2c55);transition:width .4s}
-.syncpill.ready{color:var(--accent)}
-.syncpill.ready .track{display:none}
-/* בהכנה — פס שרץ הלוך ושוב, בלי אחוזים */
-.syncpill.busy .track i{width:35%!important;animation:busy 1.2s ease-in-out infinite alternate}
-@keyframes busy{from{transform:translateX(0)}to{transform:translateX(-186%)}}
 /* טבעת טעינה כמו באתר — מופיעה רק אם הטעינה באמת לוקחת זמן */
 .loader{position:absolute;z-index:3;width:44px;height:44px;border-radius:50%;border:7px solid #fff;pointer-events:none;opacity:0;transition:opacity .2s;animation:spin 1s linear infinite}
 .loader::before,.loader::after{content:"";position:absolute;top:-7px;left:-7px;right:-7px;bottom:-7px;border-radius:50%;border:7px solid;z-index:-1}
-.loader::before{border-color:#25f4ee;transform:translate(-3px,-3px)}
-.loader::after{border-color:#fe2c55;transform:translate(3px,3px)}
+.loader::before{border-color:var(--cyan);transform:translate(-3px,-3px)}
+.loader::after{border-color:var(--accent);transform:translate(3px,3px)}
 .slide.loading .loader{opacity:1;transition-delay:.35s}
-@keyframes spin{to{transform:rotate(360deg)}}
-/* אהבתי — נשמר בנגן גם אחרי שנצפה, ולא נכלל במכסה */
-.like{display:flex;flex-direction:column;align-items:center;margin-bottom:16px;font-size:12px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.35)}
-.like svg{width:36px;height:36px;fill:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));transition:transform .15s}
-.like[aria-pressed=true] svg{fill:var(--accent)}
-.like.pop svg{transform:scale(1.25)}
-.gear{position:absolute;left:10px;top:12px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;pointer-events:auto}
-.gear svg{width:23px;height:23px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
-.toast{position:absolute;z-index:30;left:50%;bottom:90px;transform:translateX(-50%);max-width:86%;padding:9px 16px;border-radius:12px;background:rgba(22,24,35,.86);font-size:14px;font-weight:600;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
-.toast.show{opacity:1}
-.sheetbg{position:absolute;top:0;left:0;right:0;bottom:0;z-index:40;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
-.sheet{width:100%;padding:18px 18px 22px;border-radius:16px 16px 0 0;background:#fff;color:var(--ink)}
-.sheet h2{font-size:18px;margin-bottom:4px}
-.sheet .note{font-size:13px;color:#8a8b91;line-height:1.5;margin-bottom:10px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #eceef1}
-.row b{display:block;font-size:15px}
-.row small{display:block;font-size:12.5px;color:#8a8b91}
-.step{display:flex;align-items:center;gap:6px;flex:none;direction:ltr}
-.step button{width:34px;height:34px;border-radius:50%;background:#f1f1f2;font-size:20px;font-weight:700;line-height:1}
-.step output{min-width:58px;text-align:center;font-weight:800;font-size:15px}
-.sheet .done{width:100%;margin-top:12px;padding:11px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px}
-/* ---- הנפשות קטנות ---- */
-.srcbtn,.gear,.like,.tab,.step button,.sheet .done,.chip,.avatar,.who b,.grid button,.back{transition:transform .14s ease-out,background-color .15s,opacity .15s}
-.srcbtn:active,.gear:active,.tab:active,.step button:active,.sheet .done:active,.chip:active,.back:active,.grid button:active{transform:scale(.93)}
-.like:active svg{transform:scale(.86)}
-.avatar:active,.who b:active{transform:scale(.92);opacity:.85}
-.gear svg{transition:transform .4s cubic-bezier(.3,1.4,.5,1)}
-.gear.on svg{transform:rotate(90deg)}
-.menu:not([hidden]){animation:drop .2s cubic-bezier(.2,.9,.3,1);transform-origin:top right}
-.menu .tab{animation:fadein .25s both}
-.feedtabs button[aria-selected=true]::after{animation:grow .22s ease-out}
+.state,.endslide{height:100%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);line-height:1.7;font-size:15px}
+.state h2,.endslide h2{color:var(--fg);font-size:20px;margin-bottom:6px}
+.state img{height:28px;margin-bottom:24px}
+
+/* ---- סרגל תחתון ---- */
+.bnav{position:absolute;left:0;right:0;bottom:0;z-index:50;height:var(--nav);display:flex;align-items:center;background:#000;border-top:1px solid rgba(255,255,255,.08)}
+.bnav button{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;font-weight:700;color:rgba(255,255,255,.6);transition:color .15s}
+.bnav button svg{width:25px;height:25px;transition:transform .15s}
+.bnav button[aria-current=true]{color:#fff}
+.bnav button:active svg{transform:scale(.88)}
+.bnav .sync{flex:none;width:72px}
+/* הכפתור באמצע — כמו ה"+" של טיקטוק: מלבן לבן עם צללים בטורקיז ובאדום */
+.plus{position:relative;width:46px;height:30px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:-4px 0 0 var(--cyan),4px 0 0 var(--accent);transition:transform .15s}
+.plus svg{width:20px!important;height:20px!important}
+.sync:active .plus{transform:scale(.9)}
+.plus .dot{position:absolute;top:-4px;right:-7px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid #000;display:none}
+.sync.on .dot{display:block;animation:pulse .9s ease-in-out infinite alternate}
+.sync.on .plus svg{animation:spin 1.6s linear infinite}
+
+/* ---- העתקה מהמחשב: גלולה לבנה מתחת לראש, עם פס התקדמות וכפתור עצירה ---- */
+.syncpill{position:absolute;z-index:24;top:60px;left:50%;transform:translate(-50%,-12px);width:max-content;min-width:220px;max-width:92%;padding:8px 14px 9px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13.5px;font-weight:700;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .3s}
+.syncpill.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.syncpill small{display:block;margin-top:1px;font-size:12px;font-weight:600;color:var(--gray)}
+.syncpill .row1{display:flex;align-items:center;gap:10px;justify-content:center}
+.syncpill .row1>div{min-width:0}
+#syncText{white-space:nowrap}
+.syncpill .stop{flex:none;padding:3px 10px;border-radius:999px;background:#f1f1f2;color:var(--accent);font-size:12.5px;font-weight:800}
+.syncpill .stop[disabled]{color:var(--gray)}
+.track{height:4px;margin-top:7px;border-radius:2px;background:var(--line);overflow:hidden}
+.track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--accent));transition:width .4s}
+.syncpill.ready{color:var(--accent)}
+.syncpill.ready .track,.syncpill.ready .stop{display:none}
+.busy .track i{width:35%!important;animation:busy 1.2s ease-in-out infinite alternate}
+
+/* ---- דפים (ערוצים, אהבתי, אני, חיפוש) — לבנים, כמו בטיקטוק ---- */
+.page{position:absolute;top:0;left:0;right:0;bottom:var(--nav);z-index:30;background:#fff;color:var(--ink);overflow-y:auto;animation:fadein .18s}
+.page.full{bottom:0;z-index:60}
+.phead{position:sticky;top:0;z-index:3;display:flex;align-items:center;height:50px;padding:0 6px;background:rgba(255,255,255,.96);border-bottom:1px solid #f0f0f2}
+.phead b{position:absolute;left:56px;right:56px;text-align:center;font-size:17px;font-weight:800;pointer-events:none}
+.phead .icon{position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:1}
+.phead .icon svg{width:24px;height:24px}
+.phead .spacer{flex:1}
+.empty{padding:60px 30px;text-align:center;color:var(--gray);font-size:15px;line-height:1.6}
+.empty svg{width:64px;height:64px;margin:0 auto 12px;fill:none;stroke:#c8c9cd;stroke-width:1.4}
+.empty b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
+/* רשת סרטונים (3 עמודות) */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.grid button{position:relative;padding-top:177.78%;background:#e9e9ec;overflow:hidden;animation:fadein .3s both;transition:transform .14s}
+.grid button:active{transform:scale(.96)}
+.grid img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+.grid img.ok{opacity:1}
+.grid span{position:absolute;right:6px;bottom:5px;font-size:11.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.grid .seen{position:absolute;top:5px;left:5px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.45);font-size:10.5px;font-weight:700;color:#fff;font-style:normal}
+.grid .heart{position:absolute;top:5px;right:5px;width:16px;height:16px;fill:var(--accent);filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
+.grid .cap{position:absolute;left:0;right:0;bottom:0;padding:18px 6px 5px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.55));color:#fff;font-size:11.5px;font-weight:600;line-height:1.3;text-align:start;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* רשימת ערוצים */
+.chrow{display:flex;align-items:center;gap:12px;width:100%;padding:11px 16px;text-align:start;transition:background-color .15s}
+.chrow:active{background:#f4f4f6}
+.chrow .av{position:relative;flex:none;width:54px;height:54px;border-radius:50%;border:1px solid var(--line);overflow:hidden;background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
+.chrow .av img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.chrow .tx{flex:1;min-width:0}
+.chrow .tx b{display:block;font-size:16px;font-weight:800}
+.chrow .tx small{display:block;font-size:13px;color:var(--gray);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chrow .new{flex:none;padding:3px 9px;border-radius:999px;background:var(--accent);color:#fff;font-size:12px;font-weight:800}
+.chrow .chev{flex:none;width:18px;height:18px;stroke:#c0c1c6}
+/* אני */
+.prof{padding:22px 18px 14px;text-align:center}
+.prof .big{position:relative;width:96px;height:96px;margin:0 auto 10px;border-radius:50%;border:1px solid var(--line);overflow:hidden;background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:var(--ink);animation:popin .45s cubic-bezier(.3,1.4,.5,1) .05s both}
+.prof .big img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.prof h2{font-size:20px;font-weight:800}
+.prof .handle{font-size:13.5px;color:var(--gray);direction:ltr}
+.prof .nums{display:flex;justify-content:center;gap:24px;margin:14px 0 10px}
+.prof .nums b{display:block;font-size:17px;font-weight:800}
+.prof .nums small{font-size:12px;color:var(--gray)}
+.prof p{font-size:14px;line-height:1.55;color:#55565c;max-width:330px;margin:0 auto}
+.btns{display:flex;justify-content:center;gap:8px;margin-top:12px}
+.btns button{padding:9px 18px;border-radius:6px;background:#f1f1f2;font-size:14.5px;font-weight:700;transition:transform .14s}
+.btns button.main{background:var(--accent);color:#fff}
+.btns button:active{transform:scale(.95)}
+.sect{display:flex;align-items:center;justify-content:center;gap:6px;height:44px;border-bottom:1px solid #f0f0f2;font-size:14.5px;font-weight:800}
+.sect svg{width:18px;height:18px}
+/* חיפוש */
+.sbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 12px;background:#fff;border-bottom:1px solid #f0f0f2}
+.sbox{flex:1;display:flex;align-items:center;gap:6px;height:38px;padding:0 10px;border-radius:6px;background:#f1f1f2}
+.sbox svg{flex:none;width:18px;height:18px;stroke:var(--gray)}
+.sbox input{flex:1;min-width:0;height:100%;font-size:15.5px;color:var(--ink)}
+.sbox input::placeholder{color:#a0a1a6}
+.sbox .clr{display:none;flex:none;width:20px;height:20px;border-radius:50%;background:#c8c9cd;color:#fff;font-size:12px;line-height:20px;text-align:center}
+.sbox.has .clr{display:block}
+.shead{padding:14px 16px 6px;font-size:14.5px;font-weight:800}
+
+/* ---- חלונית ערוץ: נכנסת מהצד ---- */
+.chan{position:absolute;top:0;left:0;right:0;bottom:var(--nav);z-index:45;background:#fff;color:var(--ink);overflow-y:auto;transform:translateX(-100%);transition:transform .26s ease-in,visibility 0s .26s;visibility:hidden}
+.chan.open{transform:none;visibility:visible;transition:transform .32s cubic-bezier(.2,.9,.3,1)}
+.chan .prof .big{animation:none;transform:scale(.6);opacity:0;transition:transform .45s cubic-bezier(.3,1.4,.5,1) .08s,opacity .25s .08s}
+.chan.open .prof .big{transform:none;opacity:1}
+
+/* ---- חלונות מלמטה (הגדרות, עדכון) ---- */
+.sheetbg{position:absolute;top:0;left:0;right:0;bottom:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
 .sheetbg:not([hidden]){animation:fadein .2s}
 .sheetbg:not([hidden]) .sheet{animation:up .3s cubic-bezier(.2,.9,.3,1)}
 .sheetbg.closing{animation:fadeout .2s forwards}
 .sheetbg.closing .sheet{animation:down .2s ease-in forwards}
-@keyframes drop{from{opacity:0;transform:scale(.9) translateY(-6px)}}
+.sheet{width:100%;max-height:88%;overflow-y:auto;padding:18px 18px 22px;border-radius:16px 16px 0 0;background:#fff;color:var(--ink)}
+.sheet h2{font-size:18px;margin-bottom:4px}
+.sheet h3{margin:14px 0 2px;font-size:13px;font-weight:700;color:var(--gray)}
+.note{font-size:13px;color:var(--gray);line-height:1.5;margin-bottom:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row b{display:block;font-size:15px}
+.row small{display:block;font-size:12.5px;color:var(--gray)}
+.step{display:flex;align-items:center;gap:6px;flex:none;direction:ltr}
+.step button{width:34px;height:34px;border-radius:50%;background:#f1f1f2;font-size:20px;font-weight:700;line-height:1;transition:transform .14s}
+.step button:active{transform:scale(.9)}
+.step output{min-width:58px;text-align:center;font-weight:800;font-size:15px}
+.done{width:100%;margin-top:12px;padding:11px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;transition:transform .14s,opacity .15s}
+.done:active{transform:scale(.97)}
+.done.ghost{background:#f1f1f2;color:var(--ink)}
+.done[disabled]{opacity:.5}
+.stats{display:flex;gap:8px;margin:8px 0 2px}
+.stats div{flex:1;padding:9px 6px;border-radius:12px;background:#f4f4f6;text-align:center}
+.stats b{display:block;font-size:17px;font-weight:800}
+.stats small{font-size:11.5px;color:var(--gray)}
+.meter{height:6px;margin:10px 0 4px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,var(--cyan),var(--accent));transition:width .6s cubic-bezier(.2,.9,.3,1)}
+.switch{position:relative;flex:none;width:44px;height:26px;border-radius:13px;background:#d6d7db;transition:background-color .2s}
+.switch::after{content:"";position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .22s cubic-bezier(.3,1.3,.5,1)}
+.switch[aria-checked=true]{background:var(--accent)}
+.switch[aria-checked=true]::after{transform:translateX(-18px)}
+.chip{flex:none;padding:7px 12px;border-radius:999px;background:#f1f1f2;font-size:13.5px;font-weight:700;color:var(--accent)}
+.ver{margin-top:12px;font-size:12px;color:#b0b1b6;text-align:center}
+/* מצב העדכון בחלון "עדכון" */
+.upd{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:#f4f4f6;margin:10px 0 4px}
+.upd .ic{flex:none;width:44px;height:44px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center}
+.upd .ic svg{width:24px;height:24px}
+.upd.on .ic svg{animation:spin 1.6s linear infinite}
+.upd .tx{flex:1;min-width:0}
+.upd .tx b{display:block;font-size:15px}
+.upd .tx small{display:block;font-size:13px;color:var(--gray)}
+
+.toast{position:absolute;z-index:80;left:50%;bottom:calc(var(--nav) + 70px);transform:translateX(-50%);max-width:86%;padding:9px 16px;border-radius:12px;background:rgba(22,24,35,.88);color:#fff;font-size:14px;font-weight:600;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+
+/* ---- הנפשות קטנות ---- */
+.searchbtn,.act,.avatar,.who b,.chip,.filterchip,.back{transition:transform .14s ease-out,opacity .15s}
+.searchbtn:active,.chip:active,.filterchip:active,.phead .icon:active{transform:scale(.9)}
+.act:active svg{transform:scale(.86)}
+.avatar:active,.who b:active{transform:scale(.92);opacity:.85}
 @keyframes fadein{from{opacity:0}}
 @keyframes fadeout{to{opacity:0}}
 @keyframes grow{from{transform:scaleX(0)}}
 @keyframes up{from{transform:translateY(100%)}}
 @keyframes down{to{transform:translateY(100%)}}
-
-/* ---- הגדרות: גוללות, עם מידע ומתגים ---- */
-.sheet{max-height:88%;overflow-y:auto}
-.sheet h3{margin:14px 0 2px;font-size:13px;font-weight:700;color:#8a8b91}
-.stats{display:flex;gap:8px;margin:8px 0 2px}
-.stats div{flex:1;padding:9px 6px;border-radius:12px;background:#f4f4f6;text-align:center}
-.stats b{display:block;font-size:17px;font-weight:800}
-.stats small{font-size:11.5px;color:#8a8b91}
-.meter{height:6px;margin:10px 0 4px;border-radius:3px;background:#eceef1;overflow:hidden}
-.meter i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#25f4ee,#fe2c55);transition:width .6s cubic-bezier(.2,.9,.3,1)}
-.switch{position:relative;flex:none;width:44px;height:26px;border-radius:13px;background:#d6d7db;transition:background-color .2s}
-.switch::after{content:"";position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .22s cubic-bezier(.3,1.3,.5,1)}
-.switch[aria-checked=true]{background:var(--accent)}
-.switch[aria-checked=true]::after{transform:translateX(-18px)}
-.chip{flex:none;padding:7px 12px;border-radius:999px;background:#f1f1f2;font-size:13.5px;font-weight:700}
-.chip.warn{color:var(--accent)}
-.ver{margin-top:12px;font-size:12px;color:#b0b1b6;text-align:center}
-
-/* ---- חלונית ערוץ: נכנסת מהצד, עם האייקון בגדול, מידע ורשת סרטונים ---- */
-.chan{position:absolute;top:0;left:0;right:0;bottom:0;z-index:45;background:#fff;color:var(--ink);overflow-y:auto;transform:translateX(-100%);transition:transform .26s ease-in,visibility 0s .26s;visibility:hidden}
-.chan.open{transform:none;visibility:visible;transition:transform .32s cubic-bezier(.2,.9,.3,1)}
-.chan .head{position:sticky;top:0;z-index:2;display:flex;align-items:center;height:48px;padding:0 8px;background:rgba(255,255,255,.94);border-bottom:1px solid #f0f0f2}
-.chan .head b{flex:1;text-align:center;font-size:16px;margin-left:36px}
-.back{width:36px;height:36px;display:flex;align-items:center;justify-content:center}
-.back svg{width:24px;height:24px}
-.prof{padding:20px 18px 14px;text-align:center}
-.prof .big{width:96px;height:96px;margin:0 auto 10px;border-radius:50%;border:1px solid #eceef1;overflow:hidden;background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:var(--ink);transform:scale(.6);opacity:0;transition:transform .45s cubic-bezier(.3,1.4,.5,1) .08s,opacity .25s .08s}
-.chan.open .prof .big{transform:none;opacity:1}
-.prof .big{position:relative}
-.prof .big img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#fff}
-.prof h2{font-size:20px;font-weight:800}
-.prof .handle{font-size:13.5px;color:#8a8b91;direction:ltr}
-.prof .nums{display:flex;justify-content:center;gap:22px;margin:14px 0 10px}
-.prof .nums b{display:block;font-size:17px;font-weight:800}
-.prof .nums small{font-size:12px;color:#8a8b91}
-.prof p{font-size:14px;line-height:1.55;color:#55565c;max-width:330px;margin:0 auto}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
-.grid button{position:relative;padding-top:177.78%;background:#e9e9ec;overflow:hidden;animation:fadein .3s both}
-.grid img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
-.grid img.ok{opacity:1}
-.grid span{position:absolute;right:6px;bottom:5px;font-size:11.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
-.grid .seen{position:absolute;top:5px;left:5px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.45);font-size:10.5px;font-weight:700;color:#fff}
-.grid .heart{position:absolute;top:5px;right:5px;width:16px;height:16px;fill:var(--accent);filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
-.who b{display:inline-block;cursor:pointer}
-.state,.endslide{height:100%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);line-height:1.7;font-size:15px}
-.state h2,.endslide h2{color:var(--fg);font-size:20px;margin-bottom:6px}
-.state img{height:28px;margin-bottom:24px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{40%{transform:scale(1.3)}}
+@keyframes popin{from{transform:scale(.6);opacity:0}}
+@keyframes pulse{to{opacity:.45}}
+@keyframes busy{from{transform:translateX(0)}to{transform:translateX(-186%)}}
 </style>
 </head>
 <body>
 <div class="phone">
+<main class="feed" id="feed"></main>
 <header class="top">
-  <button class="srcbtn" id="srcBtn" aria-expanded="false"><span id="srcLabel">הכל</span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+  <button class="searchbtn" id="searchBtn" type="button" aria-label="חיפוש"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/></svg></button>
   <nav class="feedtabs" id="feedtabs">
     <button type="button" data-feed="latest" aria-selected="true">עדכני</button>
     <button type="button" data-feed="unwatched" aria-selected="false">לא נצפו</button>
-    <button type="button" data-feed="liked" aria-selected="false">אהבתי</button>
   </nav>
-  <button class="gear" id="gear" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  <button class="filterchip" id="filterChip" type="button" hidden><span id="filterLabel"></span><i>✕</i></button>
 </header>
-<nav class="menu" id="menu" hidden></nav>
-<main class="feed" id="feed"></main>
-<button class="syncpill" id="syncpill" type="button"><span id="syncText"></span><small id="syncSub"></small><div class="track"><i id="syncBar"></i></div></button>
-<div class="toast" id="toast"></div>
+<div class="syncpill" id="syncpill">
+  <div class="row1"><div><span id="syncText"></span><small id="syncSub"></small></div><button class="stop" id="pillStop" type="button">עצור</button></div>
+  <div class="track"><i id="syncBar"></i></div>
+</div>
+
+<!-- ערוצים -->
+<section class="page" id="pg-channels" hidden>
+  <div class="phead"><b>ערוצים</b></div>
+  <div id="chList"></div>
+</section>
+<!-- אהבתי -->
+<section class="page" id="pg-liked" hidden>
+  <div class="phead"><b>אהבתי</b></div>
+  <div class="grid" id="likedGrid"></div>
+  <div class="empty" id="likedEmpty" hidden><svg viewBox="0 0 24 24"><path d="M12 20.5l-1.3-1.2C5.6 14.7 2.5 11.9 2.5 8.4 2.5 5.6 4.7 3.5 7.4 3.5c1.6 0 3.1.7 4.1 1.9 1-1.2 2.5-1.9 4.1-1.9 2.7 0 4.9 2.1 4.9 4.9 0 3.5-3.1 6.3-8.2 10.9L12 20.5z"/></svg><b>עוד לא סימנת "אהבתי"</b>סרטון שתסמנו יישמר בנגן גם אחרי שצפיתם בו, ולא ייכלל במכסה</div>
+</section>
+<!-- אני -->
+<section class="page" id="pg-me" hidden>
+  <div class="phead"><span class="spacer"></span><b>הנגן שלי</b><button class="icon" id="meSettings" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+  <div class="prof">
+    <div class="big"><img src="icon.png" alt=""></div>
+    <h2>VODOS</h2>
+    <div class="handle">@offline</div>
+    <div class="nums">
+      <div><b id="meCount"></b><small>סרטונים</small></div>
+      <div><b id="meNew"></b><small>לא נצפו</small></div>
+      <div><b id="meLiked"></b><small>אהבתי</small></div>
+      <div><b id="meSaved"></b><small>הורדות</small></div>
+    </div>
+    <p id="meLast"></p>
+    <div class="btns"><button type="button" class="main" id="meUpdate">עדכון מהמחשב</button><button type="button" id="meSettings2">הגדרות</button></div>
+  </div>
+  <div class="sect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>צפית לאחרונה</div>
+  <div class="grid" id="histGrid"></div>
+  <div class="empty" id="histEmpty" hidden>עוד לא צפית בסרטונים</div>
+</section>
+<!-- חיפוש -->
+<section class="page full" id="pg-search" hidden>
+  <div class="sbar">
+    <button class="phead icon back" id="searchBack" type="button" aria-label="חזרה" style="position:static;height:38px;width:38px;border:0;background:none;padding:0"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></button>
+    <div class="sbox" id="sbox"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/></svg><input id="searchInput" type="search" placeholder="חיפוש בסרטונים ובערוצים" autocomplete="off"><button class="clr" id="searchClear" type="button">✕</button></div>
+  </div>
+  <div id="searchChannels"></div>
+  <div class="shead" id="searchHead" hidden></div>
+  <div class="grid" id="searchGrid"></div>
+  <div class="empty" id="searchEmpty"></div>
+</section>
+<!-- חלונית ערוץ -->
+<section class="chan" id="chan" aria-hidden="true">
+  <div class="phead"><button class="icon back" id="chanBack" type="button" aria-label="חזרה"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></button><b id="chanTitle"></b></div>
+  <div class="prof">
+    <div class="big" id="chanAvatar"></div>
+    <h2 id="chanName"></h2>
+    <div class="handle" id="chanHandle"></div>
+    <div class="nums">
+      <div><b id="chanCount"></b><small>סרטונים</small></div>
+      <div><b id="chanNew"></b><small>לא נצפו</small></div>
+      <div><b id="chanLiked"></b><small>אהבתי</small></div>
+    </div>
+    <p id="chanAbout"></p>
+    <div class="btns"><button type="button" class="main" id="chanPlay">צפייה בכל הסרטונים</button></div>
+  </div>
+  <div class="grid" id="chanGrid"></div>
+</section>
+
+<!-- סרגל תחתון -->
+<nav class="bnav" id="bnav">
+  <button type="button" data-page="home" aria-current="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2L2.8 11a1 1 0 0 0 1.3 1.5l.9-.8V20a1 1 0 0 0 1 1h4.2v-5.6h3.6V21H18a1 1 0 0 0 1-1v-8.3l.9.8a1 1 0 0 0 1.3-1.5L12 3.2z"/></svg>בית</button>
+  <button type="button" data-page="channels"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.8 20c.6-3.4 3.2-5.5 6.2-5.5s5.6 2.1 6.2 5.5"/><circle cx="17" cy="9.5" r="2.6"/><path d="M16.6 14.6c2.4.1 4.2 1.8 4.7 4.4"/></svg>ערוצים</button>
+  <button type="button" class="sync" id="syncBtn" aria-label="עדכון מהמחשב"><span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg><i class="dot"></i></span></button>
+  <button type="button" data-page="liked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20.5l-1.3-1.2C5.6 14.7 2.5 11.9 2.5 8.4 2.5 5.6 4.7 3.5 7.4 3.5c1.6 0 3.1.7 4.1 1.9 1-1.2 2.5-1.9 4.1-1.9 2.7 0 4.9 2.1 4.9 4.9 0 3.5-3.1 6.3-8.2 10.9L12 20.5z"/></svg>אהבתי</button>
+  <button type="button" data-page="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c.8-4 4-6.3 8-6.3s7.2 2.3 8 6.3"/></svg>אני</button>
+</nav>
+
+<!-- עדכון מהמחשב -->
+<div class="sheetbg" id="update" hidden>
+  <div class="sheet">
+    <h2>עדכון מהמחשב</h2>
+    <div class="upd" id="updBox"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg></div><div class="tx"><b id="updTitle"></b><small id="updText"></small></div></div>
+    <div class="track" id="updTrack" hidden><i id="updBar"></i></div>
+    <button class="done" id="updStop" type="button" hidden>עצור את העדכון</button>
+    <p class="note" id="updLast" style="margin-top:12px"></p>
+    <h3>איך מעדכנים</h3>
+    <p class="note">מחברים את הנגן בכבל למחשב שבו מותקנת התוכנה "VODOS לנגן". המחשב מוריד את הסרטונים החדשים מכל הערוצים ומעתיק אותם לנגן — ההתקדמות מופיעה כאן ובהתראה. אפשר לעצור בכל רגע; מה שכבר הגיע נשאר.</p>
+    <button class="done ghost" id="updClose" type="button">סגירה</button>
+  </div>
+</div>
+<!-- הגדרות -->
 <div class="sheetbg" id="settings" hidden>
   <div class="sheet">
     <h2>הגדרות</h2>
@@ -184,7 +337,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     </div>
     <div class="meter"><i id="stMeter"></i></div>
     <p class="note" id="stSpace"></p>
-    <p class="note" id="stLast"></p>
 
     <h3>העתקה מהמחשב</h3>
     <p class="note">ההגדרות עוברות למחשב בחיבור הבא. סרטונים שנצפו מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
@@ -199,40 +351,29 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="row"><div><b>הסתרת סרטונים שנצפו</b><small>בלשונית "עדכני" להציג רק מה שעוד לא ראיתם</small></div>
       <button class="switch" type="button" role="switch" data-opt="hideWatched" aria-label="הסתרת סרטונים שנצפו"></button></div>
     <div class="row"><div><b>היסטוריית צפייה</b><small id="stWatched"></small></div>
-      <button class="chip warn" id="resetWatched" type="button">איפוס</button></div>
-
-    <h3>איך זה עובד</h3>
-    <p class="note">מחברים את הנגן בכבל למחשב שבו מותקנת התוכנה "VODOS לנגן". המחשב מוריד את הסרטונים החדשים מכל הערוצים ומעתיק אותם לנגן — ההתקדמות מופיעה בהתראה ובפס למעלה. אחרי ההעתקה אפשר לנתק ולצפות בלי אינטרנט.</p>
+      <button class="chip" id="resetWatched" type="button">איפוס</button></div>
     <button class="done" id="settingsDone" type="button">סגירה</button>
     <p class="ver" id="ver"></p>
   </div>
 </div>
-<section class="chan" id="chan" aria-hidden="true">
-  <div class="head"><button class="back" id="chanBack" type="button" aria-label="חזרה"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></button><b id="chanTitle"></b></div>
-  <div class="prof">
-    <div class="big" id="chanAvatar"></div>
-    <h2 id="chanName"></h2>
-    <div class="handle" id="chanHandle"></div>
-    <div class="nums">
-      <div><b id="chanCount"></b><small>סרטונים</small></div>
-      <div><b id="chanNew"></b><small>לא נצפו</small></div>
-      <div><b id="chanLiked"></b><small>אהבתי</small></div>
-    </div>
-    <p id="chanAbout"></p>
-  </div>
-  <div class="grid" id="chanGrid"></div>
-</section>
+<div class="toast" id="toast"></div>
 </div>
 <script>
 (function () {
 var PAGE = 8, OUTRO_MS = 1700, WATCHED_MAX = 5000;
 var BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-var feed = document.getElementById('feed'), menu = document.getElementById('menu');
-var srcBtn = document.getElementById('srcBtn'), srcLabel = document.getElementById('srcLabel');
+var HEART = '<svg viewBox="0 0 24 24"><path d="M12 21.2l-1.5-1.3C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.5 11.4L12 21.2z"/></svg>';
+var DOWN = '<svg viewBox="0 0 24 24"><path d="M12 2.5a1.6 1.6 0 0 1 1.6 1.6v8.6l2.6-2.6a1.6 1.6 0 1 1 2.3 2.3l-5.4 5.4a1.6 1.6 0 0 1-2.2 0l-5.4-5.4a1.6 1.6 0 1 1 2.3-2.3l2.6 2.6V4.1A1.6 1.6 0 0 1 12 2.5zM4.5 19h15a1.5 1.5 0 0 1 0 3h-15a1.5 1.5 0 0 1 0-3z"/></svg>';
+var SHARE = '<svg viewBox="0 0 24 24"><path d="M13.6 3.3a1 1 0 0 1 1.1.2l7 6.8a1 1 0 0 1 0 1.4l-7 6.8a1 1 0 0 1-1.7-.7v-3.4c-4.7.1-7.8 1.6-10 5.2a.6.6 0 0 1-1.1-.4C2.6 12.5 6.6 8.6 13 8.1V4.2a1 1 0 0 1 .6-.9z"/></svg>';
+var CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg>';
+var feed = document.getElementById('feed');
+function $(id) { return document.getElementById(id); }
+function each(sel, fn, root) { Array.prototype.forEach.call((root || document).querySelectorAll(sel), fn); }
 
 function get(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
 function set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 function esc(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function plain(t) { return String(t || '').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim(); }
 function fmt(t) {
   return esc(t).replace(/\*\*([^*\n](?:[^*]*?[^*\s])?)\s*\*\*/g, '<b>$1</b>').replace(/__([^_\n](?:[^_]*?[^_\s])?)__/g, '<b>$1</b>').replace(/\*\*|__/g, '');
 }
@@ -252,11 +393,15 @@ try { data = window.VODOS ? JSON.parse(VODOS.index()) : {}; } catch (e) {}
 if (window.VODOS && VODOS.immersive) VODOS.immersive();
 var base = data.base || '', idx = data.index || {}, sources = idx.sources || {};
 var ALL = (idx.videos || []).slice().sort(function (a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
+var BY = {}; ALL.forEach(function (v) { BY[v.f] = v; });
+function srcName(s) { return (sources[s] || {}).name || s; }
+function srcAvatar(s) { var a = (sources[s] || {}).avatar || ''; return !a ? '' : /^data:/.test(a) ? a : base + a; }
 
 var watchedList = get('vod_watched', []), watched = {};
 watchedList.forEach(function (k) { watched[k] = 1; });
 function markWatched(f) {
-  if (watched[f]) return; watched[f] = 1; watchedList.push(f);
+  if (watched[f]) { watchedList.splice(watchedList.indexOf(f), 1); watchedList.push(f); set('vod_watched', watchedList); return; } // לראש ההיסטוריה
+  watched[f] = 1; watchedList.push(f);
   if (watchedList.length > WATCHED_MAX) watchedList.splice(0, watchedList.length - WATCHED_MAX).forEach(function (x) { delete watched[x]; });
   set('vod_watched', watchedList);
   saveState();
@@ -272,6 +417,9 @@ function toggleLike(v) {
   saveState(true);
 }
 
+// הורדות לגלריה
+var saved = get('vod_saved', {});
+
 var GB_STEPS = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 var settings = get('vod_settings', {});
 if (!settings.pcGB) settings.pcGB = 2;
@@ -286,34 +434,31 @@ function saveState(now) {
     saveTimer = null;
     VODOS.saveState(JSON.stringify({
       saved: new Date().toISOString(), settings: settings, likes: likes,
-      watched: ALL.filter(function (v) { return watched[v.f]; }).map(function (v) { return v.f; }),
+      watched: ALL.filter(function (v) { return watched[v.f]; }).map(function (v) { return v.f; })
     }));
   }, now ? 0 : 4000);
 }
 
-var toastEl = document.getElementById('toast'), toastTimer = null;
+var toastEl = $('toast'), toastTimer = null;
 function toast(text) {
   toastEl.textContent = text; toastEl.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2000);
 }
 
-var FEEDS = { latest: 1, unwatched: 1, liked: 1 };
-var feedMode = get('vod_feed', 'latest'); if (!FEEDS[feedMode]) feedMode = 'latest';
-var source = get('vod_source', '');
-if (source && !sources[source]) source = '';
+// ---- הפיד: "עדכני" / "לא נצפו", או רשימה מסוננת (ערוץ, חיפוש, אהבתי, היסטוריה) ----
+var feedMode = get('vod_feed', 'latest'); if (feedMode !== 'unwatched') feedMode = 'latest';
+var filter = null; // {label, files:[…]}
 var list = [], shown = 0, cur = -1, activeVideo = null, watchTimer = null;
-var HEART = '<svg viewBox="0 0 24 24"><path d="M12 21.2l-1.5-1.3C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.5 11.4L12 21.2z"/></svg>';
 
 function avatarHtml(s) {
-  var src = sources[s] || {}, a = src.avatar || '', name = src.name || s;
-  var url = !a ? '' : /^data:/.test(a) ? a : base + a;
-  return '<div class="avatar">' + esc(name.charAt(0)) + (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '') + '</div>';
+  var url = srcAvatar(s), name = srcName(s);
+  return '<button class="avatar" type="button" aria-label="' + esc(name) + '">' + esc(name.charAt(0)) + (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '') + '</button>';
 }
 
 function slide(v) {
   var el = document.createElement('section');
   el.className = 'slide';
-  var name = (sources[v.s] || {}).name || v.s;
+  var name = srcName(v.s);
   el.innerHTML =
     // poster שקוף — אחרת אנדרואיד מציג סמל "נגן" אפור וענק עד שהסרטון נטען
     '<video playsinline preload="none" poster="' + BLANK + '" data-src="' + esc(base + v.f) + '"></video>' +
@@ -323,15 +468,33 @@ function slide(v) {
     '<div class="shade"></div>' +
     '<div class="info"><div class="who"><b>@' + esc(name) + '</b><time>' + ago(v.ts) + '</time></div>' +
     (v.t ? '<p class="title">' + fmt(v.t) + '</p>' : '') + '</div>' +
-    '<div class="side"><button class="like" type="button" aria-pressed="' + !!liked[v.f] + '">' + HEART + 'אהבתי</button>' + avatarHtml(v.s) + '</div>' +
+    '<div class="side">' + avatarHtml(v.s) +
+      '<button class="act like" type="button" aria-pressed="' + !!liked[v.f] + '">' + HEART + '<span>אהבתי</span></button>' +
+      '<button class="act dl" type="button" aria-pressed="' + !!saved[v.f] + '">' + DOWN + '<span>הורדה</span></button>' +
+      '<button class="act share" type="button">' + SHARE + '<span>שיתוף</span></button>' +
+    '</div>' +
     '<div class="bar"><i></i></div>';
-  var video = el.querySelector('video'), bar = el.querySelector('.bar i'), title = el.querySelector('.title'), like = el.querySelector('.like');
+  var video = el.querySelector('video'), bar = el.querySelector('.bar i'), title = el.querySelector('.title');
+  var like = el.querySelector('.like'), dl = el.querySelector('.dl');
   video._f = v.f;
   like.addEventListener('click', function (e) {
     e.stopPropagation(); toggleLike(v);
     like.setAttribute('aria-pressed', String(!!liked[v.f]));
-    like.classList.add('pop'); setTimeout(function () { like.classList.remove('pop'); }, 160);
+    like.classList.remove('pop'); void like.offsetWidth; like.classList.add('pop');
   });
+  dl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!window.VODOS || !VODOS.download) return toast('הורדה עובדת רק בנגן');
+    dl.classList.add('busy'); toast('שומר בגלריה…');
+    VODOS.download(v.f);
+  });
+  el.querySelector('.share').addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!window.VODOS || !VODOS.share) return toast('שיתוף עובד רק בנגן');
+    VODOS.share(v.f, (plain(v.t) ? plain(v.t) + '\n' : '') + '— @' + name + ' · VODOS');
+  });
+  el.querySelector('.avatar').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
+  el.querySelector('.who b').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
   video.addEventListener('loadedmetadata', function () { if (video.videoWidth > video.videoHeight) el.classList.add('landscape'); });
   video.addEventListener('timeupdate', function () { if (video.duration) bar.style.transform = 'scaleX(' + (video.currentTime / video.duration) + ')'; });
   video.addEventListener('ended', function () {
@@ -347,20 +510,30 @@ function slide(v) {
   video.addEventListener('waiting', function () { el.classList.add('loading'); });
   video.addEventListener('playing', function () {
     el.classList.remove('loading');
-    if (video !== activeVideo) video.pause(); // play() שהתעכב והתחיל אחרי שכבר גללו הלאה
+    if (video !== activeVideo || page !== 'home') video.pause(); // play() שהתעכב והתחיל אחרי שכבר גללו הלאה
   });
   if (title) title.addEventListener('click', function (e) { e.stopPropagation(); title.classList.toggle('open'); });
-  // לחיצה על הסמליל או על שם הערוץ — חלונית הערוץ
-  el.querySelector('.avatar').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
-  el.querySelector('.who b').addEventListener('click', function (e) { e.stopPropagation(); openChan(v.s); });
   el.addEventListener('click', function () {
-    if (!menu.hidden) return closeMenu();
     if (video.paused) play(video); else { video.pause(); el.classList.add('paused'); }
   });
   return el;
 }
 
+// תשובה מהאפליקציה על הורדה / שיתוף
+window.vodosSaved = function (f, res) {
+  each('.slide', function (el) {
+    var v = el.querySelector('video'); if (!v || v._f !== f) return;
+    var dl = el.querySelector('.dl'); dl.classList.remove('busy');
+    if (res === 'ok') dl.setAttribute('aria-pressed', 'true');
+  });
+  if (res === 'ok') { saved[f] = 1; set('vod_saved', saved); toast('נשמר בגלריה · Movies/VODOS'); }
+  else if (res === 'denied') toast('צריך לאשר גישה לאחסון כדי להוריד');
+  else if (res === 'noshare') toast('אין בנגן אפליקציה לשיתוף');
+  else toast('ההורדה נכשלה');
+};
+
 function play(video) {
+  if (page !== 'home') return;
   if (video.readyState < 3) video.parentNode.classList.add('loading');
   if (!video.getAttribute('src')) { video.preload = 'auto'; video.src = video.getAttribute('data-src'); }
   if (video.ended) video.currentTime = 0; // רק בסוף — כל השמה ל-currentTime היא קפיצה בקובץ שמעכבת את ההתחלה
@@ -392,7 +565,7 @@ function setActive(i) {
   clearTimeout(watchTimer);
   if (video) {
     play(video);
-    watchTimer = setTimeout(function () { if (activeVideo === video) markWatched(video._f); }, 1500);
+    watchTimer = setTimeout(function () { if (activeVideo === video && page === 'home') markWatched(video._f); }, 1500);
   }
   if (i >= shown - 2) more();
 }
@@ -409,30 +582,31 @@ function more() {
   for (; shown < end; shown++) feed.appendChild(slide(list[shown]));
   if (shown >= list.length && list.length && !feed.querySelector('.endslide')) {
     var e = document.createElement('div'); e.className = 'endslide';
-    e.innerHTML = feedMode === 'liked' ? '<h2>זהו</h2>אלה כל הסרטונים שאהבת'
+    e.innerHTML = filter ? '<h2>זהו</h2>' + esc(filter.label)
       : '<h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'זהו להפעם') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים';
     feed.appendChild(e);
   }
 }
 
-// startF — להתחיל מסרטון מסוים (מהרשת בחלונית הערוץ)
+// startF — להתחיל מסרטון מסוים
 function reload(startF) {
   activeVideo = null; cur = -1; clearTimeout(watchTimer);
-  Array.prototype.forEach.call(feed.querySelectorAll('video'), release);
+  each('video', release, feed);
   feed.innerHTML = ''; feed.scrollTop = 0; shown = 0;
-  var hideSeen = feedMode === 'unwatched' || (feedMode === 'latest' && settings.hideWatched);
-  list = ALL.filter(function (v) {
-    if (v.f === startF) return true;
-    return (!source || v.s === source) && !(hideSeen && watched[v.f]) && (feedMode !== 'liked' || liked[v.f]);
-  });
+  if (filter) list = filter.files.map(function (f) { return BY[f]; }).filter(Boolean);
+  else {
+    var hideSeen = feedMode === 'unwatched' || settings.hideWatched;
+    list = ALL.filter(function (v) { return v.f === startF || !(hideSeen && watched[v.f]); });
+  }
+  $('filterChip').hidden = !filter;
+  if (filter) $('filterLabel').textContent = filter.label;
+  showTab();
   if (!ALL.length) {
     feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין עדיין סרטונים</h2>חברו את הנגן למחשב שבו מותקנת התוכנה "VODOS לנגן", והסרטונים יועתקו אליו אוטומטית.</div>';
     return;
   }
   if (!list.length) {
-    feed.innerHTML = feedMode === 'liked'
-      ? '<div class="state"><h2>עוד לא סימנת "אהבתי"</h2>סרטון שתסמנו יישמר בנגן גם אחרי שצפיתם בו</div>'
-      : '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
+    feed.innerHTML = '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
     return;
   }
   var start = 0;
@@ -442,28 +616,210 @@ function reload(startF) {
   setActive(start);
 }
 
-// ---- הגדרות: מידע על הנגן, נפח, אפשרויות צפייה ----
-var sheet = document.getElementById('settings'), gear = document.getElementById('gear');
-function $(id) { return document.getElementById(id); }
+// מנגן רשימה מסוימת (מרשת סרטונים), מהסרטון שנלחץ
+function playList(vids, f, label) {
+  filter = { label: label, files: vids.map(function (v) { return v.f; }) };
+  closeChan(true); closeSearch();
+  showPage('home', true);
+  reload(f);
+}
+
+function showTab() {
+  each('#feedtabs button', function (b) { b.setAttribute('aria-selected', String(!filter && b.getAttribute('data-feed') === feedMode)); });
+}
+$('feedtabs').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.getAttribute('data-feed') === feedMode && !filter) return;
+  feedMode = b.getAttribute('data-feed'); set('vod_feed', feedMode); filter = null; reload();
+});
+$('filterChip').addEventListener('click', function () { filter = null; reload(); });
+
+// ---- רשת סרטונים (ערוץ, אהבתי, היסטוריה, חיפוש) עם תמונות קטנות שהנגן מכין ----
+function gridHtml(vids, caption) {
+  return vids.map(function (v, i) {
+    return '<button type="button" data-f="' + esc(v.f) + '" style="animation-delay:' + Math.min(i, 15) * 25 + 'ms"><img alt="">' +
+      (watched[v.f] ? '<i class="seen">נצפה</i>' : '') + (liked[v.f] ? HEART.replace('<svg', '<svg class="heart"') : '') +
+      (caption ? '<div class="cap">' + esc(plain(v.t) || srcName(v.s)) + '</div>' : '<span>' + esc(ago(v.ts)) + '</span>') + '</button>';
+  }).join('');
+}
+var thumbTimers = {};
+function loadThumbs(grid, round) {
+  clearTimeout(thumbTimers[grid.id]);
+  if (!window.VODOS || !VODOS.thumb || !grid.offsetParent) return;
+  var missing = 0;
+  each('button', function (b) {
+    var img = b.querySelector('img'); if (img.getAttribute('src')) return;
+    var u = VODOS.thumb(b.getAttribute('data-f'));
+    if (u) { img.onload = function () { img.className = 'ok'; }; img.src = u; } else missing++;
+  }, grid);
+  if (missing && (round || 0) < 120) thumbTimers[grid.id] = setTimeout(function () { loadThumbs(grid, (round || 0) + 1); }, 700);
+}
+function fillGrid(grid, vids, label, caption) {
+  grid.innerHTML = gridHtml(vids, caption);
+  grid._vids = vids; grid._label = label;
+  loadThumbs(grid, 0);
+}
+each('.grid', function (g) {
+  g.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-f]'); if (!b) return;
+    playList(g._vids, b.getAttribute('data-f'), g._label);
+  });
+});
+
+// ---- דפים וסרגל תחתון ----
+var page = 'home';
+function showPage(name, keepFeed) {
+  page = name;
+  each('#bnav [data-page]', function (b) { b.setAttribute('aria-current', String(b.getAttribute('data-page') === name)); });
+  ['channels', 'liked', 'me'].forEach(function (p) { $('pg-' + p).hidden = p !== name; });
+  closeChan(true);
+  if (name === 'home') { if (!keepFeed && activeVideo) play(activeVideo); }
+  else {
+    if (activeVideo) activeVideo.pause();
+    if (name === 'channels') renderChannels();
+    if (name === 'liked') renderLiked();
+    if (name === 'me') renderMe();
+  }
+}
+$('bnav').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-page]'); if (!b) return;
+  var p = b.getAttribute('data-page');
+  if (p === 'home' && page === 'home' && chan.className.indexOf('open') < 0) { feed.scrollTo({ top: 0, behavior: 'smooth' }); return; } // לחיצה שנייה על "בית" — לראש
+  showPage(p);
+});
+
+function channelKeys() { return Object.keys(sources).filter(function (k) { return ALL.some(function (v) { return v.s === k; }); }); }
+function renderChannels() {
+  $('chList').innerHTML = channelKeys().map(function (k) {
+    var vids = ALL.filter(function (v) { return v.s === k; }), fresh = vids.filter(function (v) { return !watched[v.f]; }).length, url = srcAvatar(k);
+    return '<button class="chrow" type="button" data-s="' + esc(k) + '"><span class="av">' + esc(srcName(k).charAt(0)) +
+      (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '') + '</span>' +
+      '<span class="tx"><b>' + esc(srcName(k)) + '</b><small>' + vids.length + ' סרטונים · ' + esc(ABOUT[k] || '@' + k) + '</small></span>' +
+      (fresh ? '<span class="new">' + fresh + ' חדשים</span>' : '') + CHEV + '</button>';
+  }).join('') || '<div class="empty">אין עדיין ערוצים</div>';
+}
+$('chList').addEventListener('click', function (e) { var b = e.target.closest('[data-s]'); if (b) openChan(b.getAttribute('data-s')); });
+
+function renderLiked() {
+  var vids = likes.slice().reverse().map(function (v) { return BY[v.f]; }).filter(Boolean);
+  $('likedEmpty').hidden = vids.length > 0;
+  fillGrid($('likedGrid'), vids, 'סרטונים שאהבת', false);
+}
+
+function renderMe() {
+  var seen = ALL.filter(function (v) { return watched[v.f]; }).length;
+  $('meCount').textContent = ALL.length;
+  $('meNew').textContent = ALL.length - seen;
+  $('meLiked').textContent = likes.length;
+  $('meSaved').textContent = Object.keys(saved).length;
+  $('meLast').textContent = idx.created ? 'עדכון אחרון מהמחשב: ' + ago(idx.created) : 'עוד לא היה עדכון מהמחשב';
+  var hist = watchedList.slice().reverse().map(function (f) { return BY[f]; }).filter(Boolean).slice(0, 60);
+  $('histEmpty').hidden = hist.length > 0;
+  fillGrid($('histGrid'), hist, 'צפית לאחרונה', false);
+}
+$('meSettings').addEventListener('click', openSettings);
+$('meSettings2').addEventListener('click', openSettings);
+$('meUpdate').addEventListener('click', openUpdate);
+
+// ---- חיפוש ----
+var searchPg = $('pg-search'), sInput = $('searchInput'), sTimer = null;
+function openSearch() {
+  if (activeVideo) activeVideo.pause();
+  searchPg.hidden = false; runSearch();
+  setTimeout(function () { sInput.focus(); }, 60);
+}
+function closeSearch() { if (!searchPg.hidden) { searchPg.hidden = true; sInput.blur(); if (page === 'home' && activeVideo && chan.className.indexOf('open') < 0) play(activeVideo); } }
+function runSearch() {
+  var q = sInput.value.trim().toLowerCase();
+  $('sbox').classList.toggle('has', !!q);
+  if (!q) {
+    $('searchChannels').innerHTML = ''; $('searchHead').hidden = true; $('searchGrid').innerHTML = '';
+    $('searchEmpty').hidden = false; $('searchEmpty').textContent = 'חפשו מילה מהכותרת או שם של ערוץ';
+    return;
+  }
+  var words = q.split(/\s+/);
+  var match = function (s) { s = s.toLowerCase(); return words.every(function (w) { return s.indexOf(w) >= 0; }); };
+  var chs = channelKeys().filter(function (k) { return match(srcName(k) + ' ' + k); });
+  var vids = ALL.filter(function (v) { return match(plain(v.t) + ' ' + srcName(v.s)); });
+  $('searchChannels').innerHTML = chs.map(function (k) {
+    var url = srcAvatar(k);
+    return '<button class="chrow" type="button" data-s="' + esc(k) + '"><span class="av">' + esc(srcName(k).charAt(0)) +
+      (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '') + '</span><span class="tx"><b>' + esc(srcName(k)) + '</b><small>ערוץ · ' +
+      ALL.filter(function (v) { return v.s === k; }).length + ' סרטונים</small></span>' + CHEV + '</button>';
+  }).join('');
+  $('searchHead').hidden = !vids.length; $('searchHead').textContent = vids.length + ' סרטונים';
+  $('searchEmpty').hidden = !!(vids.length || chs.length); $('searchEmpty').textContent = 'לא נמצא כלום עבור "' + sInput.value.trim() + '"';
+  fillGrid($('searchGrid'), vids.slice(0, 90), 'חיפוש: ' + sInput.value.trim(), true);
+}
+$('searchBtn').addEventListener('click', openSearch);
+$('searchBack').addEventListener('click', closeSearch);
+sInput.addEventListener('input', function () { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 200); });
+$('searchClear').addEventListener('click', function () { sInput.value = ''; runSearch(); sInput.focus(); });
+$('searchChannels').addEventListener('click', function (e) { var b = e.target.closest('[data-s]'); if (b) { sInput.blur(); openChan(b.getAttribute('data-s')); } });
+
+// ---- חלונית ערוץ ----
+var ABOUT = {
+  hagizra: 'חדשות ואקטואליה לציבור החרדי — מבזקים, עדכונים וכתבות וידאו מהשטח.',
+  blackcat: 'סרטונים קצרים ועדכונים שוטפים — מה שקורה עכשיו, בקצרה.',
+  pargod: 'קבוצת החדשות "הפרגוד" — חדשות ואקטואליה בסרטונים קצרים, לציבור החרדי והדתי.',
+  pargodmusic: 'ערוץ המוזיקה של הפרגוד — סינגלים, קליפים והופעות מעולם המוזיקה היהודית.',
+  musiconline: 'חדשות המוזיקה היהודית — סינגלים חדשים, קליפים והופעות.'
+};
+var chan = $('chan'), chanS = '';
+function openChan(s) {
+  chanS = s;
+  var name = srcName(s), url = srcAvatar(s);
+  var vids = ALL.filter(function (v) { return v.s === s; });
+  $('chanTitle').textContent = name;
+  $('chanName').textContent = name;
+  $('chanHandle').textContent = '@' + s;
+  $('chanAvatar').innerHTML = esc(name.charAt(0)) + (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '');
+  $('chanCount').textContent = vids.length;
+  $('chanNew').textContent = vids.filter(function (v) { return !watched[v.f]; }).length;
+  $('chanLiked').textContent = vids.filter(function (v) { return liked[v.f]; }).length;
+  $('chanAbout').textContent = ABOUT[s] || 'ערוץ ב-VODOS';
+  chan.scrollTop = 0;
+  if (activeVideo) activeVideo.pause();
+  chan.classList.add('open'); chan.setAttribute('aria-hidden', 'false');
+  fillGrid($('chanGrid'), vids, '@' + name, false);
+  setTimeout(function () { loadThumbs($('chanGrid'), 0); }, 350); // אחרי שהחלונית נכנסה
+}
+function closeChan(keepPaused) {
+  if (chan.className.indexOf('open') < 0) return;
+  chan.classList.remove('open'); chan.setAttribute('aria-hidden', 'true');
+  if (!keepPaused && page === 'home' && activeVideo && searchPg.hidden) play(activeVideo);
+}
+$('chanBack').addEventListener('click', function () { closeChan(); });
+$('chanPlay').addEventListener('click', function () {
+  var vids = ALL.filter(function (v) { return v.s === chanS; });
+  if (vids.length) playList(vids, vids[0].f, '@' + srcName(chanS));
+});
+
+// ---- חלונות מלמטה ----
+function openSheet(el) { el.classList.remove('closing'); el.hidden = false; if (activeVideo) activeVideo.pause(); }
+function closeSheet(el) {
+  if (el.hidden || el.classList.contains('closing')) return;
+  el.classList.add('closing');
+  setTimeout(function () {
+    el.hidden = true; el.classList.remove('closing');
+    if (page === 'home' && activeVideo && searchPg.hidden && chan.className.indexOf('open') < 0 && $('settings').hidden && $('update').hidden) play(activeVideo);
+  }, 190);
+}
+
+// הגדרות
+var sheet = $('settings');
 function gb(x) { return (x < 1 ? x * 1000 + 'MB' : x + 'GB'); }
 function size(b) { return b >= 1e9 ? (b / 1073741824).toFixed(1) + 'GB' : Math.round(b / 1048576) + 'MB'; }
 function bridge(name, d) { try { return window.VODOS && VODOS[name] ? JSON.parse(VODOS[name]()) : d; } catch (e) { return d; } }
-function openSheet(el) { el.classList.remove('closing'); el.hidden = false; }
-function closeSheet(el, then) {
-  if (el.hidden || el.classList.contains('closing')) return;
-  el.classList.add('closing');
-  setTimeout(function () { el.hidden = true; el.classList.remove('closing'); if (then) then(); }, 190);
-}
 function showSettings() {
   $('pcGB').textContent = gb(settings.pcGB);
   $('deviceGB').textContent = gb(settings.deviceGB);
-  Array.prototype.forEach.call(sheet.querySelectorAll('[data-opt]'), function (b) { b.setAttribute('aria-checked', String(!!settings[b.getAttribute('data-opt')])); });
+  each('[data-opt]', function (b) { b.setAttribute('aria-checked', String(!!settings[b.getAttribute('data-opt')])); }, sheet);
   var seen = ALL.filter(function (v) { return watched[v.f]; }).length;
   $('stCount').textContent = ALL.length;
   $('stNew').textContent = ALL.length - seen;
   $('stLiked').textContent = likes.length;
   $('stWatched').textContent = seen ? 'צפית ב-' + seen + ' מתוך ' + ALL.length + ' הסרטונים שבנגן' : 'עוד לא צפית בסרטונים';
-  $('stLast').textContent = idx.created ? 'עדכון אחרון מהמחשב: ' + ago(idx.created) : 'עוד לא היה עדכון מהמחשב';
   var st = bridge('storage', null);
   if (st && st.used != null) {
     $('stSpace').textContent = 'הסרטונים תופסים ' + size(st.used) + ' · פנוי בנגן ' + size(st.free);
@@ -473,17 +829,16 @@ function showSettings() {
   var ver = window.VODOS && VODOS.version ? VODOS.version() : '';
   $('ver').textContent = 'VODOS' + (ver ? ' ' + ver : '') + ' · אופליין';
 }
-gear.addEventListener('click', function () { closeMenu(); showSettings(); gear.classList.add('on'); openSheet(sheet); if (activeVideo) activeVideo.pause(); });
-function closeSettings() { gear.classList.remove('on'); closeSheet(sheet, function () { if (activeVideo && chan.className.indexOf('open') < 0) play(activeVideo); }); }
-$('settingsDone').addEventListener('click', closeSettings);
+function openSettings() { showSettings(); openSheet(sheet); }
+$('settingsDone').addEventListener('click', function () { closeSheet(sheet); });
 var resetArmed = 0;
 sheet.addEventListener('click', function (e) {
-  if (e.target === sheet) return closeSettings();
+  if (e.target === sheet) return closeSheet(sheet);
   var o = e.target.closest('[data-opt]');
   if (o) {
     var key = o.getAttribute('data-opt');
     settings[key] = !settings[key]; set('vod_settings', settings); showSettings();
-    if (key === 'hideWatched' && feedMode === 'latest') reload();
+    if (key === 'hideWatched' && !filter) reload();
     return;
   }
   if (e.target.closest('#resetWatched')) {
@@ -500,122 +855,69 @@ sheet.addEventListener('click', function (e) {
   set('vod_settings', settings); showSettings(); saveState(true);
 });
 
-// ---- חלונית ערוץ: סמליל גדול, מידע, כמה סרטונים יש, ורשת הסרטונים (כמו בטיקטוק) ----
-var ABOUT = {
-  hagizra: 'חדשות ואקטואליה לציבור החרדי — מבזקים, עדכונים וכתבות וידאו מהשטח.',
-  blackcat: 'סרטונים קצרים ועדכונים שוטפים — מה שקורה עכשיו, בקצרה.',
-  pargod: 'קבוצת החדשות "הפרגוד" — חדשות ואקטואליה בסרטונים קצרים, לציבור החרדי והדתי.',
-  pargodmusic: 'ערוץ המוזיקה של הפרגוד — סינגלים, קליפים והופעות מעולם המוזיקה היהודית.',
-  musiconline: 'חדשות המוזיקה היהודית — סינגלים חדשים, קליפים והופעות.'
-};
-var chan = $('chan'), chanGrid = $('chanGrid'), thumbTimer = null;
-function openChan(s) {
-  var src = sources[s] || {}, name = src.name || s, a = src.avatar || '';
-  var url = !a ? '' : /^data:/.test(a) ? a : base + a;
-  var vids = ALL.filter(function (v) { return v.s === s; });
-  $('chanTitle').textContent = name;
-  $('chanName').textContent = name;
-  $('chanHandle').textContent = '@' + s;
-  $('chanAvatar').innerHTML = esc(name.charAt(0)) + (url ? '<img src="' + esc(url) + '" alt="" onerror="this.remove()">' : '');
-  $('chanCount').textContent = vids.length;
-  $('chanNew').textContent = vids.filter(function (v) { return !watched[v.f]; }).length;
-  $('chanLiked').textContent = vids.filter(function (v) { return liked[v.f]; }).length;
-  $('chanAbout').textContent = ABOUT[s] || 'ערוץ ב-VODOS';
-  chanGrid.innerHTML = vids.map(function (v, i) {
-    return '<button type="button" data-f="' + esc(v.f) + '" style="animation-delay:' + Math.min(i, 15) * 25 + 'ms"><img alt="">' +
-      (watched[v.f] ? '<i class="seen">נצפה</i>' : '') + (liked[v.f] ? HEART.replace('<svg', '<svg class="heart"') : '') +
-      '<span>' + esc(ago(v.ts)) + '</span></button>';
-  }).join('');
-  chan.scrollTop = 0;
-  if (activeVideo) activeVideo.pause();
-  chan.classList.add('open'); chan.setAttribute('aria-hidden', 'false');
-  loadThumbs(0);
-}
-// התמונות הקטנות נוצרות בנגן ברקע — שואלים שוב כל רגע, עד שכולן מוכנות
-function loadThumbs(round) {
-  clearTimeout(thumbTimer);
-  if (!window.VODOS || !VODOS.thumb || chan.className.indexOf('open') < 0) return;
-  var missing = 0;
-  Array.prototype.forEach.call(chanGrid.querySelectorAll('button'), function (b) {
-    var img = b.querySelector('img'); if (img.src) return;
-    var u = VODOS.thumb(b.getAttribute('data-f'));
-    if (u) { img.onload = function () { img.className = 'ok'; }; img.src = u; } else missing++;
-  });
-  if (missing && round < 120) thumbTimer = setTimeout(function () { loadThumbs(round + 1); }, 700);
-}
-function closeChan(keepPaused) {
-  clearTimeout(thumbTimer);
-  chan.classList.remove('open'); chan.setAttribute('aria-hidden', 'true');
-  if (!keepPaused && activeVideo && sheet.hidden) play(activeVideo);
-}
-$('chanBack').addEventListener('click', function () { closeChan(); });
-chanGrid.addEventListener('click', function (e) {
-  var b = e.target.closest('button'); if (!b) return;
-  var s = (ALL.filter(function (v) { return v.f === b.getAttribute('data-f'); })[0] || {}).s;
-  closeChan(true);
-  source = s || ''; set('vod_source', source);
-  feedMode = 'latest'; set('vod_feed', feedMode);
-  buildMenu(); showTab(); reload(b.getAttribute('data-f'));
-});
-
-// ---- מקורות ו"עדכני / לא נצפו" ----
-function buildMenu() {
-  var keys = Object.keys(sources).filter(function (k) { return ALL.some(function (v) { return v.s === k; }); });
-  menu.innerHTML = [''].concat(keys).map(function (k) {
-    return '<button class="tab" data-src="' + esc(k) + '" aria-checked="' + (k === source) + '">' + esc(k ? sources[k].name : 'הכל') + '</button>';
-  }).join('');
-  srcLabel.textContent = source ? sources[source].name : 'הכל';
-}
-function closeMenu() { menu.hidden = true; srcBtn.setAttribute('aria-expanded', 'false'); }
-srcBtn.addEventListener('click', function (e) { e.stopPropagation(); menu.hidden = !menu.hidden; srcBtn.setAttribute('aria-expanded', String(!menu.hidden)); });
-menu.addEventListener('click', function (e) {
-  var b = e.target.closest('.tab'); if (!b) return;
-  source = b.getAttribute('data-src'); set('vod_source', source); buildMenu(); closeMenu(); reload();
-});
-function showTab() {
-  Array.prototype.forEach.call(document.querySelectorAll('#feedtabs button'), function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-feed') === feedMode)); });
-}
-document.getElementById('feedtabs').addEventListener('click', function (e) {
-  var b = e.target.closest('button'); if (!b || b.getAttribute('data-feed') === feedMode) return;
-  feedMode = b.getAttribute('data-feed'); set('vod_feed', feedMode); showTab(); reload();
-});
-
-// ---- העתקה מהמחשב: מה מצב ההעתקה (כל שנייה וחצי) ----
-var pill = document.getElementById('syncpill');
+// ---- עדכון מהמחשב: מצב ההעתקה (כל שנייה וחצי), בגלולה, בכפתור שבאמצע ובחלון "עדכון" ----
+var pill = $('syncpill'), upd = $('update');
 function syncStatus() { try { return JSON.parse(VODOS.status()); } catch (e) { return {}; } }
-var shownSync = window.VODOS && VODOS.status ? syncStatus() : null;
+var hasBridge = !!(window.VODOS && VODOS.status);
+var shownSync = hasBridge ? syncStatus() : null;
 var loadedId = shownSync && shownSync.finished ? shownSync.id : 0; // העתקה שהסתיימה לפני שהפיד נטען — כבר בפנים
-function pollSync() {
-  var s = syncStatus();
-  pill.classList.remove('ready', 'busy');
-  if (s.msg && (s.active || s.error)) { // המחשב בשלב ההכנה (מחובר / מוריד…) או שגיאה
-    document.getElementById('syncText').textContent = s.title;
-    document.getElementById('syncSub').textContent = s.text;
-    pill.classList.add('show', s.error ? 'ready' : 'busy');
-  } else if (s.active) {
-    document.getElementById('syncText').textContent = 'מעתיק סרטונים מהמחשב…';
-    document.getElementById('syncSub').textContent = s.done + ' מתוך ' + s.total + ' · אל תנתקו את הנגן';
-    document.getElementById('syncBar').style.width = (s.total ? s.done / s.total * 100 : 0) + '%';
-    pill.classList.add('show');
-  } else if (s.finished && s.id !== loadedId) {
-    document.getElementById('syncText').textContent = s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓';
-    document.getElementById('syncSub').textContent = '';
-    pill.classList.add('show', 'ready');
-  } else pill.classList.remove('show');
+var lastS = {};
+function describe(s) {
+  if (s.msg && (s.active || s.error)) return { title: s.title, text: s.text, busy: !s.error, error: s.error, stop: s.active };
+  if (s.active) return { title: 'מעתיק סרטונים מהמחשב…', text: s.done + ' מתוך ' + s.total + ' · אל תנתקו את הנגן', pct: s.total ? s.done / s.total * 100 : 0, stop: true };
+  if (s.finished && s.id !== loadedId) return { title: s.videos ? 'נוספו ' + s.videos + ' סרטונים חדשים · הצג' : 'הנגן מעודכן ✓', text: '', ready: true };
+  return null;
 }
-pill.addEventListener('click', function () { if (pill.classList.contains('ready')) location.reload(); });
+function pollSync() {
+  var s = syncStatus(); lastS = s;
+  var d = describe(s);
+  pill.classList.remove('ready', 'busy');
+  if (d) {
+    $('syncText').textContent = d.title; $('syncSub').textContent = d.stop && s.stopping ? 'עוצר את העדכון…' : d.text;
+    if (d.pct != null) $('syncBar').style.width = d.pct + '%';
+    if (d.busy) pill.classList.add('busy');
+    if (d.ready || d.error) pill.classList.add('ready');
+    $('pillStop').hidden = !d.stop; $('pillStop').disabled = !!s.stopping; $('pillStop').textContent = s.stopping ? 'עוצר…' : 'עצור';
+    pill.classList.add('show');
+  } else pill.classList.remove('show');
+  $('syncBtn').classList.toggle('on', !!(d && d.stop));
+  if (!upd.hidden) renderUpdate();
+}
+function renderUpdate() {
+  var s = lastS, d = describe(s) || {};
+  var on = !!d.stop;
+  $('updBox').classList.toggle('on', on);
+  $('updTitle').textContent = d.title || 'הנגן לא מחובר למחשב';
+  $('updText').textContent = d.stop && s.stopping ? 'עוצר את העדכון…' : (d.text || (hasBridge ? 'חברו את הנגן בכבל למחשב כדי לקבל סרטונים חדשים' : ''));
+  $('updTrack').hidden = !on; $('updTrack').classList.toggle('busy', !!d.busy);
+  if (d.pct != null) $('updBar').style.width = d.pct + '%';
+  $('updStop').hidden = !on; $('updStop').disabled = !!s.stopping; $('updStop').textContent = s.stopping ? 'עוצר…' : 'עצור את העדכון';
+  $('updLast').textContent = idx.created ? 'עדכון אחרון: ' + ago(idx.created) + ' · ' + ALL.length + ' סרטונים בנגן' : '';
+}
+function openUpdate() { if (hasBridge) lastS = syncStatus(); renderUpdate(); openSheet(upd); }
+function stopSync() { if (window.VODOS && VODOS.stopSync) { VODOS.stopSync(); toast('עוצר את העדכון…'); setTimeout(pollSync, 300); } }
+$('syncBtn').addEventListener('click', openUpdate);
+$('updClose').addEventListener('click', function () { closeSheet(upd); });
+upd.addEventListener('click', function (e) { if (e.target === upd) closeSheet(upd); });
+$('updStop').addEventListener('click', stopSync);
+$('pillStop').addEventListener('click', function (e) { e.stopPropagation(); stopSync(); });
+pill.addEventListener('click', function () { if (pill.classList.contains('ready') && !lastS.error && !(lastS.msg)) location.reload(); else openUpdate(); });
 if (shownSync) { pollSync(); setInterval(pollSync, 1500); }
 
+// ---- חזרה (כפתור "אחורה" של אנדרואיד) ----
 window.vodosPause = function () { if (activeVideo) activeVideo.pause(); if (saveTimer) saveState(true); };
 window.vodosBack = function () {
-  if (!sheet.hidden) { closeSettings(); return true; }
+  if (!sheet.hidden) { closeSheet(sheet); return true; }
+  if (!upd.hidden) { closeSheet(upd); return true; }
+  if (!searchPg.hidden) { closeSearch(); return true; }
   if (chan.className.indexOf('open') >= 0) { closeChan(); return true; }
-  if (!menu.hidden) { closeMenu(); return true; }
+  if (page !== 'home') { showPage('home'); return true; }
+  if (filter) { filter = null; reload(); return true; }
   return false;
 };
-document.addEventListener('visibilitychange', function () { if (!document.hidden && activeVideo) play(activeVideo); });
+document.addEventListener('visibilitychange', function () { if (!document.hidden && activeVideo && page === 'home') play(activeVideo); });
 
-buildMenu(); showTab(); reload();
+showTab(); reload();
 saveState(); // שהמחשב יקבל את ההגדרות גם אם לא שינו כלום
 })();
 </script>

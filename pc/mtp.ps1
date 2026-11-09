@@ -12,7 +12,8 @@ param(
   [string]$List,
   [string]$Target = 'Android\data\il.vodos.offline\files',
   [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
-  [string]$Avoid = ''     # אחסון שנכשל בחיבור הזה — לא לנסות שוב
+  [string]$Avoid = '',    # אחסון שנכשל בחיבור הזה — לא לנסות שוב
+  [string]$Known = ''     # בקשות עצירה ישנות (stop-*.txt, מופרדות ב-|) — לא להתייחס אליהן
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Console]::InputEncoding = [Text.Encoding]::UTF8
@@ -59,6 +60,26 @@ function Get-Storages {
 }
 function Get-Storage { return (Get-Storages | Select-Object -First 1) }
 
+# התיקייה של האפליקציה באחסון המועדף — ישירות, בלי סריקה של כל האחסונים
+function Get-AppFolder {
+  if ($Storage) {
+    foreach ($dev in (New-Object -ComObject Shell.Application).Namespace(17).Items()) {
+      if ($dev.IsFileSystem) { continue }
+      $s = Get-Child $dev.GetFolder $Storage
+      if ($s) { $f = Get-Path $s.GetFolder $Target; if ($f) { return $f } }
+    }
+  }
+  $s = Get-Storage
+  if ($s) { return (Get-Path $s.GetFolder $Target) }
+  return $null
+}
+
+# בקשות עצירה מהאפליקציה (stop-*.txt) שלא היו ברשימה $Known (אלה שכבר היו שם כשהחיבור התחיל)
+function Get-NewStops($folder) {
+  $known = @($Known -split '\|')
+  return @($folder.Items() | ForEach-Object { [string]$_.Name } | Where-Object { $_ -like 'stop-*' -and $known -notcontains $_ })
+}
+
 function Invoke-Action {
 switch ($Action) {
   # בדיקה מהירה (שנייה): האם מחובר מכשיר נייד עם אחסון. החיפוש של תיקיית האפליקציה איטי — הוא נעשה רק אחרי
@@ -93,6 +114,13 @@ switch ($Action) {
       if ($text) { break }
     }
     Out-Json @{ have = $have; state = $text; storage = $s.Name; free = [double]$s.ExtendedProperty('System.FreeSpace') }
+  }
+
+  # האם ביקשו בנגן לעצור את העדכון
+  'stopcheck' {
+    $folder = Get-AppFolder
+    if (-not $folder) { Out-Json @{ error = 'not connected' }; return }
+    Out-Json @{ stops = @(Get-NewStops $folder) }
   }
 
   # קובץ אחד מהנגן למחשב (למשל applog.txt — היומן של האפליקציה), מודפס כטקסט
@@ -193,6 +221,8 @@ switch ($Action) {
     }
     $done = 0
     foreach ($n in $names) {
+      # כל 3 קבצים: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
+      if ($done % 3 -eq 0 -and $done -gt 0 -and (Get-NewStops (Get-AppFolder)).Count) { Out-Json @{ stopped = $true; copied = $done }; return }
       $ok = Copy-One $n
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }
@@ -211,7 +241,7 @@ if ($Action -eq 'serve') {
     if (-not $line.Trim()) { continue }
     $req = $line | ConvertFrom-Json
     $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
-    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid
+    $Storage = [string]$req.storage; $Avoid = [string]$req.avoid; $Known = [string]$req.known
     try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
     Out-Json @{ end = $req.id }
   }

@@ -25,17 +25,40 @@ final class Sync {
     int done, total, videos;
     long id; // הזמן של קובץ ה-sync (או של הודעת המצב) — מזהה את ההעתקה
     // הודעת מצב מהמחשב לפני ההעתקה (status-*.json): "הנגן מחובר", "המחשב מוריד…", או שגיאה
-    boolean msg, error;
+    boolean msg, error, stopping;
     String title = "", text = "";
 
     String json() {
       return "{\"active\":" + active + ",\"finished\":" + finished + ",\"done\":" + done + ",\"total\":" + total
-          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error
+          + ",\"videos\":" + videos + ",\"id\":" + id + ",\"msg\":" + msg + ",\"error\":" + error + ",\"stopping\":" + stopping
           + ",\"title\":" + JSONObject.quote(title) + ",\"text\":" + JSONObject.quote(text) + "}";
     }
   }
 
   static Status read(Context ctx) {
+    Status s = readFiles(ctx);
+    // ביקשו לעצור בשלוש הדקות האחרונות, והמחשב עוד לא אישר — "עוצר…"
+    long stopAt = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("stopAt", 0);
+    s.stopping = s.active && System.currentTimeMillis() - stopAt < 180000;
+    return s;
+  }
+
+  // בקשה מהמחשב להפסיק: קובץ stop-<זמן>.txt בתיקייה של האפליקציה. המחשב בודק אם הופיע קובץ כזה
+  // תוך כדי ההורדה וההעתקה, ועוצר (הסרטונים שכבר הגיעו נשארים)
+  static void requestStop(final Context ctx) {
+    ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).edit().putLong("stopAt", System.currentTimeMillis()).apply();
+    new Thread(() -> {
+      for (File dir : ctx.getExternalFilesDirs(null)) {
+        if (dir == null) continue;
+        File f = new File(dir, "stop-" + System.currentTimeMillis() + ".txt");
+        try { new java.io.FileOutputStream(f).close(); } catch (Exception e) { continue; }
+        android.media.MediaScannerConnection.scanFile(ctx, new String[] { f.getPath() }, null, null);
+      }
+      log(ctx, "stop requested");
+    }).start();
+  }
+
+  private static Status readFiles(Context ctx) {
     Status s = new Status();
     File sync = newest(ctx, "sync"), st = newest(ctx, "status");
     // הודעת מצב חדשה יותר מההעתקה האחרונה — המחשב עוד בשלב ההכנה (שני הזמנים לפי השעון של המחשב)
@@ -124,6 +147,14 @@ final class Sync {
     return b.setContentIntent(open).setOnlyAlertOnce(true);
   }
 
+  // כפתור "עצור" בהתראה — או "עוצר…" אם כבר ביקשו
+  @SuppressWarnings("deprecation")
+  private static void stopAction(Context ctx, Notification.Builder b, Status s) {
+    if (s.stopping) { b.setSubText("עוצר את העדכון…"); return; }
+    PendingIntent stop = PendingIntent.getBroadcast(ctx, 1, new Intent(ctx, PowerReceiver.Stop.class), PendingIntent.FLAG_UPDATE_CURRENT);
+    b.addAction(android.R.drawable.ic_menu_close_clear_cancel, "עצור", stop);
+  }
+
   // הודעת מצב מהמחשב: בזמן ההכנה — התראה קבועה עם פס "עובד…"; שגיאה — התראה רגילה
   static void notifyMsg(Context ctx, Status s) {
     NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -134,6 +165,7 @@ final class Sync {
       b.setSmallIcon(android.R.drawable.stat_notify_error).setAutoCancel(true);
     } else {
       b.setSmallIcon(android.R.drawable.stat_sys_download).setProgress(0, 0, true).setOngoing(true);
+      stopAction(ctx, b, s);
     }
     nm.notify(ID, b.build());
   }
@@ -151,6 +183,7 @@ final class Sync {
           .setContentText(s.done + " מתוך " + s.total + " · אל תנתקו את הנגן")
           .setProgress(s.total, s.done, false)
           .setOngoing(true);
+      stopAction(ctx, b, s);
     } else {
       nm.cancel(ID); // התראה חדשה (עם צליל) — לא רק עדכון של זו שמתקדמת
       b.setSmallIcon(android.R.drawable.stat_sys_download_done)
@@ -196,7 +229,7 @@ final class Sync {
     while (System.currentTimeMillis() < end) {
       Status s = read(ctx);
       if (s.msg) {
-        String key = s.id + s.title + s.text;
+        String key = s.id + s.title + s.text + s.stopping;
         if (s.active || (s.error && s.id > prefs.getLong("error", 0))) {
           if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; log(ctx, "notify msg: " + s.title + " / " + s.text); }
           if (s.error) prefs.edit().putLong("error", s.id).apply();

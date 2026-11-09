@@ -1,6 +1,7 @@
 package il.vodos.offline;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.media.MediaScannerConnection;
@@ -164,7 +165,7 @@ public class MainActivity extends Activity {
           File[] list = dir.listFiles();
           if (list != null) for (File f : list) {
             String n = f.getName();
-            if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
+            if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.startsWith("stop-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
           }
           // תמונות קטנות של סרטונים שכבר נמחקו
           File[] th = thumbs().listFiles();
@@ -227,6 +228,37 @@ public class MainActivity extends Activity {
       return "";
     }
 
+    // שיתוף הסרטון עצמו (לא קישור — אין אינטרנט) דרך חלון השיתוף של אנדרואיד
+    @JavascriptInterface
+    public void share(String f, String text) {
+      if (f == null || f.contains("/")) return;
+      Intent send = new Intent(Intent.ACTION_SEND)
+          .setType("video/mp4")
+          .putExtra(Intent.EXTRA_STREAM, Files.uri(f))
+          .putExtra(Intent.EXTRA_TEXT, text == null ? "" : text)
+          .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      runOnUiThread(() -> {
+        try { startActivity(Intent.createChooser(send, "שיתוף סרטון")); }
+        catch (Exception e) { js("window.vodosSaved&&vodosSaved(" + JSONObject.quote(f) + ",'noshare')"); }
+      });
+    }
+
+    // הורדה לגלריה: עותק ב-Movies/VODOS (בקשת הרשאה בפעם הראשונה). התשובה חוזרת ל-vodosSaved(f, 'ok'|'denied'|'fail')
+    @JavascriptInterface
+    public void download(String f) {
+      if (f == null || f.contains("/")) return;
+      runOnUiThread(() -> {
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+          pendingDownload = f;
+          requestPermissions(new String[] { android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, 7);
+        } else saveToGallery(f);
+      });
+    }
+
+    // עצירת העדכון מהמחשב (גם מהכפתור בהתראה)
+    @JavascriptInterface
+    public void stopSync() { Sync.requestStop(MainActivity.this); }
+
     @JavascriptInterface
     public String version() {
       try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; }
@@ -236,6 +268,42 @@ public class MainActivity extends Activity {
     public void immersive() {
       runOnUiThread(() -> web.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY));
     }
+  }
+
+  private String pendingDownload;
+
+  private void js(String code) { runOnUiThread(() -> { if (web != null) web.evaluateJavascript(code, null); }); }
+
+  @Override
+  public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+    if (code != 7 || pendingDownload == null) return;
+    String f = pendingDownload; pendingDownload = null;
+    if (res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) saveToGallery(f);
+    else js("window.vodosSaved&&vodosSaved(" + JSONObject.quote(f) + ",'denied')");
+  }
+
+  private void saveToGallery(final String f) {
+    new Thread(() -> {
+      String result = "fail";
+      try {
+        File src = null;
+        for (File d : getExternalFilesDirs(null)) if (d != null && new File(d, f).isFile()) src = new File(d, f);
+        File dir = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES), "VODOS");
+        dir.mkdirs();
+        File out = new File(dir, f);
+        if (src != null) {
+          if (out.length() != src.length()) {
+            try (InputStream in = new FileInputStream(src); FileOutputStream o = new FileOutputStream(out)) {
+              byte[] buf = new byte[1 << 16]; int n;
+              while ((n = in.read(buf)) > 0) o.write(buf, 0, n);
+            }
+          }
+          MediaScannerConnection.scanFile(this, new String[] { out.getPath() }, null, null);
+          result = "ok";
+        }
+      } catch (Exception e) {}
+      js("window.vodosSaved&&vodosSaved(" + JSONObject.quote(f) + ",'" + result + "')");
+    }).start();
   }
 
   private volatile File filesDir; // התיקייה שבה הסרטונים (נקבעת ב-index)

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="il.vodos.offline" android:versionCode="8" android:versionName="1.7">
+    package="il.vodos.offline" android:versionCode="9" android:versionName="1.8">
   <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="25" />
   <!-- כדי שהמעקב אחרי חיבור למחשב יישאר מתוזמן גם אחרי הפעלה מחדש -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!-- כפתור "הורדה": עותק של הסרטון בגלריה (Movies/VODOS) -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
   <application android:label="VODOS" android:icon="@drawable/icon"
       android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" android:hardwareAccelerated="true"
       android:allowBackup="false">
@@ -21,5 +23,8 @@
       </intent-filter>
     </receiver>
     <service android:name=".PowerReceiver$Watch" android:exported="false" />
+    <receiver android:name=".PowerReceiver$Stop" android:exported="false" />
+    <provider android:name=".Files" android:authorities="il.vodos.offline.files"
+        android:exported="false" android:grantUriPermissions="true" />
   </application>
 </manifest>
