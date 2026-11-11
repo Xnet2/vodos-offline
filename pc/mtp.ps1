@@ -12,7 +12,8 @@ param(
   [string]$List,
   [string]$Target = 'Android\data\il.vodos.offline\files',
   [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
-  [string]$Session = ''   # מזהה החיבור הנוכחי — בקשת עצירה מהאפליקציה היא הקובץ stop-<מזהה>.txt
+  [string]$Session = '',  # מזהה החיבור הנוכחי — בקשת עצירה מהאפליקציה היא הקובץ stop-<מזהה>.txt
+  [string]$Clean = ''     # עדכון יומי: האפליקציה מוחקת מהנגן כל סרטון שלא ברשימה, לפני ההעתקה
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Console]::InputEncoding = [Text.Encoding]::UTF8
@@ -196,7 +197,8 @@ switch ($Action) {
     $have = @{}
     foreach ($i in $folder.Items()) { $have[$i.Name] = $true }
     # [string] — בלי זה כל שורה נושאת מאפיינים של PowerShell, וה-JSON מתנפח למגה-בייטים
-    $names = Get-Content -LiteralPath $List -Encoding UTF8 | ForEach-Object { [string]$_ } | Where-Object { $_ -and -not $have.ContainsKey($_) }
+    $all = @(Get-Content -LiteralPath $List -Encoding UTF8 | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    $names = $all | Where-Object { -not $have.ContainsKey($_) }
     $names = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $Local $_) })
     Out-Json @{ todo = $names.Count; existing = $have.Count }
 
@@ -219,12 +221,16 @@ switch ($Action) {
     }
 
     # קודם רשימת הקבצים שעומדים להגיע (sync-*.json) — ממנה האפליקציה בנגן מציגה את ההתקדמות
-    if ($names.Count) {
+    # בעדכון יומי — גם כשאין מה להעתיק: הרשימה המלאה (keep) אומרת לאפליקציה מה למחוק
+    if ($names.Count -or $Clean) {
       $sync = 'sync-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + '.json'
-      $json = @{ total = $names.Count; files = $names; session = $Session } | ConvertTo-Json -Compress
+      $o = @{ total = $names.Count; files = @($names); session = $Session }
+      if ($Clean) { $o.clean = $true; $o.keep = $all }
+      $json = $o | ConvertTo-Json -Compress
       [IO.File]::WriteAllText((Join-Path $Local $sync), $json, (New-Object Text.UTF8Encoding $false))
       [void](Copy-One $sync)
       Remove-Item -LiteralPath (Join-Path $Local $sync) -ErrorAction SilentlyContinue
+      if ($Clean) { Start-Sleep -Seconds 5 }  # זמן לאפליקציה למחוק את הישנים ולפנות מקום
     }
     $done = 0; $script:StopHit = $false
     foreach ($n in $names) {
@@ -249,7 +255,7 @@ if ($Action -eq 'serve') {
     if (-not $line.Trim()) { continue }
     $req = $line | ConvertFrom-Json
     $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
-    $Storage = [string]$req.storage; $Session = [string]$req.session
+    $Storage = [string]$req.storage; $Session = [string]$req.session; $Clean = [string]$req.clean
     try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
     Out-Json @{ end = $req.id }
   }

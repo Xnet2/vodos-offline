@@ -355,7 +355,8 @@ async function doRefresh() {
 
 // ---- העתקה לנגן ----
 // have — הקבצים שכבר בנגן (הם לא תופסים מקום נוסף)
-async function push(free, have) {
+// fresh — עדכון יומי: כל הסרטונים בנגן נמחקים (חוץ מ"אהבתי"), והנגן מתמלא מחדש בחדשים ביותר
+async function push(free, have, fresh) {
   if (!selection) await refresh();
   if (!selection) return;
   const liked = likedNames(), onDevice = new Set(have);
@@ -364,11 +365,13 @@ async function push(free, have) {
   const keepLiked = likes.filter(v => onDevice.has(v.f) || size(v.f) >= 0);
   // השאר: מה שלא נצפה, מהחדש לישן, עד הנפח שנבחר לנגן — ובלי למלא את המקום הפנוי בנגן
   let room = free - KEEP_FREE - keepLiked.reduce((a, v) => a + (onDevice.has(v.f) ? 0 : size(v.f)), 0), used = 0;
+  // ביומי: המקום של כל הסרטונים שבנגן (חוץ מ"אהבתי") מתפנה — וכל סרטון שנבחר נספר, גם אם הוא כבר שם
+  if (fresh) room += have.filter(f => /\.(mp4|mov|m4v|webm)$/.test(f) && !liked.has(f)).reduce((a, f) => a + Math.max(0, size(f)), 0);
   const videos = selection.videos.filter(v => {
     if (watched.has(v.f) || liked.has(v.f)) return false;
     const s = size(v.f); if (s < 0) return false;
     if (used + s > settings.deviceGB * GB) return false;
-    if (!onDevice.has(v.f)) { if (s > room) return false; room -= s; }
+    if (fresh || !onDevice.has(v.f)) { if (s > room) return false; room -= s; }
     used += s; return true;
   });
   const sources = { ...selection.sources };
@@ -387,8 +390,8 @@ async function push(free, have) {
   writeFileSync(list, names.join('\n'), 'utf8');
 
   // ההתקדמות מוצגת בנגן עצמו: mtp.ps1 שולח קודם רשימה (sync-*.json), והאפליקציה סופרת מה כבר הגיע
-  log(`מעתיק לנגן (${videos.length} סרטונים ברשימה, ${(used / GB).toFixed(2)}GB, ועוד ${keepLiked.length} אהבתי)…`);
-  const out = await ps(['push', '-Local', CACHE, '-List', list], (o) => {
+  log((fresh ? 'עדכון יומי: ' : '') + `מעתיק לנגן (${videos.length} סרטונים ברשימה, ${(used / GB).toFixed(2)}GB, ועוד ${keepLiked.length} אהבתי)…`);
+  const out = await ps(['push', '-Local', CACHE, '-List', list].concat(fresh ? ['-Clean', '1'] : []), (o) => {
     // ההתקדמות גם בחלון במחשב
     if (o.todo != null) Object.assign(ui, { title: 'מעתיק סרטונים לנגן', text: o.todo ? `0 מתוך ${o.todo}` : 'אין קבצים חדשים להעתיק', done: 0, total: o.todo });
     if (o.file) Object.assign(ui, { done: o.done, text: `${o.done} מתוך ${ui.total}` });
@@ -406,12 +409,12 @@ async function push(free, have) {
   Object.assign(ui, { title: 'הנגן מעודכן ✓', text: copied ? `נוספו ${copied} סרטונים חדשים` : 'אין סרטונים חדשים', error: false, done: 0, total: 0 });
 }
 
-async function syncDevice(dev) {
+async function syncDevice(dev, fresh) {
   const KEEP = ' · אל תנתקו את הנגן';
   stopRequested = false;
   session = Date.now().toString(36); // מזהה החיבור — נשלח בכל הודעה; עצירה בנגן נכתבת כ-stop-<מזהה>.txt
   ui.busy = true;
-  status('הנגן מחובר למחשב', 'בודק אם יש סרטונים חדשים…' + KEEP);
+  status(fresh ? 'עדכון יומי' : 'הנגן מחובר למחשב', (fresh ? 'הנגן יתמלא מחדש בסרטונים הכי חדשים…' : 'בודק אם יש סרטונים חדשים…') + KEEP);
   let last = 0, stopTimer = null, checking = null;
   // בדיקה אחת אם ביקשו בנגן לעצור (בדיקות לא חופפות: אם יש אחת באוויר — מחכים לה)
   const checkStop = () => {
@@ -456,7 +459,7 @@ async function syncDevice(dev) {
     await statusFlush();
     if (await checkStop()) { stoppedMsg(); return; }
     log(`אחסון: ${st.storage}, פנוי ${((st.free || 0) / GB).toFixed(1)}GB`);
-    await push(st.free || 0, st.have || []); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
+    await push(st.free || 0, st.have || [], fresh); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
     if (stopRequested) stoppedMsg();
   } catch (e) {
     log('שגיאה בהעתקה:', e.message);
@@ -485,6 +488,12 @@ function startServer() {
       }
       res.writeHead(204); return res.end();
     }
+    // "התחל עדכון" בחלון — רק אז ניגשים לנגן (עד אז לא נכתב אליו כלום)
+    if (req.method === 'POST' && (req.url === '/start' || req.url === '/start?fresh=1')) {
+      const fresh = req.url.endsWith('fresh=1');
+      if (ui.connected && !ui.busy) { startNow = fresh ? 'fresh' : 'normal'; log(fresh ? 'עדכון יומי מהחלון במחשב' : 'התחלת עדכון מהחלון במחשב'); wake(); }
+      res.writeHead(204); return res.end();
+    }
     if (req.url === '/status') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({
@@ -500,6 +509,7 @@ function startServer() {
     res.writeHead(404); res.end();
   }).on('error', (e) => log('חלון המצב לא עלה:', e.code || e.message)).listen(47800, '127.0.0.1');
 }
+let startNow = false, wake = () => {};
 // בכל חיבור של הנגן — פותחים את חלון המצב בדפדפן (לשונית ישנה של החלון נסגרת לבד, ראו status.html)
 function openWindow() {
   try { spawn('cmd.exe', ['/c', 'start', '""', 'http://127.0.0.1:47800/'], { windowsHide: true, detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref(); }
@@ -530,13 +540,16 @@ async function main() {
     const dev = await findDevice();
     ui.connected = !!dev; ui.device = dev ? dev.device : '';
     if (!dev && wasConnected) Object.assign(ui, { title: '', text: '', error: false, done: 0, total: 0 }); // נותק
+    // חיבור: רק פותחים את חלון המצב ושואלים. העדכון (וכל הודעה בנגן) מתחיל רק בלחיצה על "התחל עדכון"
     if (dev && !wasConnected) {
       log('מכשיר חובר: ' + dev.device);
+      startNow = false;
       openWindow();
-      await syncDevice(dev);
     }
     wasConnected = !!dev;
-    await new Promise(r => setTimeout(r, POLL_MS));
+    if (dev && startNow) { const fresh = startNow === 'fresh'; startNow = false; await syncDevice(dev, fresh); continue; }
+    if (!dev) startNow = false;
+    await new Promise(r => { wake = r; setTimeout(r, POLL_MS); });
   }
 }
 

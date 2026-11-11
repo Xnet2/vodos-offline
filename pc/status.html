@@ -36,6 +36,13 @@ header p{font-size:14px;color:var(--gray)}
 .track.ind i{width:35%;animation:ind 1.2s ease-in-out infinite alternate}
 .stop{flex:none;padding:11px 20px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px}
 .stop[disabled]{opacity:.5;cursor:default}
+.go{flex:none;padding:13px 26px;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;font-size:17px;box-shadow:0 4px 14px rgba(254,44,85,.3)}
+.go.again{padding:11px 20px;font-size:15px;font-weight:700;background:var(--bg);color:var(--ink);box-shadow:none}
+.go[disabled],.daily[disabled]{opacity:.5;cursor:default}
+.btns{flex:none;display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.daily{padding:10px 18px;border-radius:12px;background:var(--bg);color:var(--ink);font-weight:700;font-size:14.5px}
+.daily small{display:block;font-size:12px;font-weight:600;color:var(--gray)}
+.main.ask .ic{background:#fff0f3;color:var(--accent)}
 
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .card{padding:16px;border-radius:16px;background:var(--card);box-shadow:0 2px 12px rgba(0,0,0,.05)}
@@ -67,6 +74,10 @@ summary{padding:14px 16px;font-weight:700;cursor:pointer}
       <div class="track" id="track" hidden><i id="bar"></i></div>
     </div>
     <button class="stop" id="stop" hidden>עצור</button>
+    <div class="btns" id="btns" hidden>
+      <button class="go" id="go">התחל עדכון</button>
+      <button class="daily" id="daily">עדכון יומי<small>מחליף הכל בחדשים ביותר</small></button>
+    </div>
   </section>
 
   <div class="grid">
@@ -92,14 +103,15 @@ function ago(iso) {
   var h = Math.round(m / 60); if (h < 24) return h === 1 ? 'לפני שעה' : 'לפני ' + h + ' שעות';
   var d = Math.round(h / 24); return d === 1 ? 'אתמול' : 'לפני ' + d + ' ימים';
 }
-var lastIcon = '';
+var lastIcon = '', starting = false;
+var USB_ASK = USB.replace('#8a8b91', 'currentColor');
 function render(s) {
   $('down').style.display = 'none';
   var main = $('main'), title, text, icon, cls = '';
   if (s.busy || (s.connected && s.title)) {
     title = s.title || 'הנגן מחובר'; text = s.text || '';
     if (s.error) { icon = ERR; cls = 'err'; } else if (!s.busy) { icon = OK; cls = 'done'; } else { icon = SYNC; cls = 'busy'; }
-  } else if (s.connected) { title = 'הנגן מחובר'; text = 'בודק…'; icon = SYNC; cls = 'busy'; }
+  } else if (s.connected) { title = 'הנגן חובר'; text = 'להתחיל לעדכן את הנגן? עד שתלחצו, לא נכתב אליו כלום'; icon = USB_ASK; cls = 'ask'; }
   else { title = 'מחכה לנגן'; text = 'חברו את הנגן בכבל USB — העדכון יתחיל לבד'; icon = USB; }
   main.className = 'main ' + cls;
   if (icon !== lastIcon) { $('ic').innerHTML = icon; lastIcon = icon; }
@@ -108,6 +120,11 @@ function render(s) {
   $('track').hidden = !showTrack;
   $('track').classList.toggle('ind', showTrack && !s.total);
   $('bar').style.width = s.total ? (s.done / s.total * 100) + '%' : '';
+  // "התחל עדכון" — כשהנגן מחובר ואין עדכון באמצע; אחרי עדכון: "עדכן שוב"
+  var go = $('go'), canStart = s.connected && !s.busy;
+  $('btns').hidden = !canStart;
+  if (canStart && !starting) { go.disabled = false; $('daily').disabled = false; go.textContent = s.title ? 'עדכן שוב' : 'התחל עדכון'; go.className = 'go' + (s.title ? ' again' : ''); }
+  if (s.busy) starting = false;
   $('stop').hidden = !s.busy; $('stop').disabled = !!s.stopping; $('stop').textContent = s.stopping ? 'עוצר…' : 'עצור';
 
   $('dev').textContent = s.connected ? 'מחובר' + (s.device ? ' · ' + s.device : '') : 'לא מחובר';
@@ -134,6 +151,17 @@ try {
   bc.onmessage = function (e) { if (e.data === 'new') window.close(); };
   bc.postMessage('new');
 } catch (e) {}
+function start(fresh) {
+  starting = true; $('go').disabled = true; $('daily').disabled = true;
+  if (!fresh) $('go').textContent = 'מתחיל…';
+  fetch(fresh ? '/start?fresh=1' : '/start', { method: 'POST' }).then(poll);
+  setTimeout(function () { starting = false; }, 15000);
+}
+$('go').addEventListener('click', function () { start(false); });
+// עדכון יומי: מוחק מהנגן את כל הסרטונים (חוץ מ"אהבתי") וממלא אותו בחדשים ביותר, עד הנפח שנבחר
+$('daily').addEventListener('click', function () {
+  if (confirm('עדכון יומי מוחק מהנגן את כל הסרטונים (חוץ מאלה שסימנתם "אהבתי") וממלא אותו מחדש בסרטונים הכי חדשים.\n\nלהמשיך?')) start(true);
+});
 poll(); setInterval(poll, 1000);
 </script>
 </body>

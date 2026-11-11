@@ -64,19 +64,13 @@ final class Sync {
     // מנותק מהמחשב — שום העתקה לא פעילה
     if (!charging(ctx)) s.active = false;
     else {
-      // מחובר, ועוד לא הגיע שום דבר חדש מהמחשב מאז החיבור — "מחכה למחשב" (בשלוש הדקות הראשונות), ולא ההודעה הישנה
+      // מחובר, ועוד לא הגיע שום דבר חדש מהמחשב מאז החיבור — לא מציגים כלום (גם לא את ההודעה הישנה):
+      // העדכון מתחיל רק כשלוחצים "התחל עדכון" בחלון שבמחשב
       android.content.SharedPreferences p = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
       File st = newest(ctx, "status"), sy = newest(ctx, "sync");
       boolean nothingNew = (st == null ? "" : st.getName()).equals(p.getString("staleStatus", "-"))
           && (sy == null ? "" : sy.getName()).equals(p.getString("staleSync", "-"));
-      if (nothingNew) {
-        s = new Status();
-        if (usb(ctx) && System.currentTimeMillis() - p.getLong("connectAt", 0) < 180000) {
-          s.msg = true; s.active = true; s.waiting = true; s.id = p.getLong("connectAt", 1);
-          s.title = "הנגן מחובר"; s.text = "מחכה לתוכנה במחשב…";
-        }
-        return s;
-      }
+      if (nothingNew) return new Status();
     }
     s.stalled = !s.finished && !s.active && !s.msg;
     // "עוצר…" — רק אם לחצו "עצור" בחיבור הזה (לפי המזהה שלו), והמחשב עוד לא אישר
@@ -148,6 +142,33 @@ final class Sync {
     s.active = !s.finished && age(sync.getName() + ":" + s.done, newest) < 120000;
     s.stalled = !s.finished && !s.active;
     return s;
+  }
+
+  // עדכון יומי: המחשב שולח קודם sync עם clean ורשימה מלאה (keep) — מוחקים מהנגן כל סרטון שלא ברשימה
+  // ("אהבתי" ברשימה), כדי שיהיה מקום לחדשים. המחשב מחכה כמה שניות לפני שהוא מתחיל להעתיק
+  static void cleanIfAsked(Context ctx) {
+    File sync = newest(ctx, "sync");
+    if (sync == null) return;
+    android.content.SharedPreferences p = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
+    long id = stamp(sync);
+    if (id <= p.getLong("cleaned", 0)) return;
+    JSONObject o;
+    try { o = new JSONObject(read(sync)); } catch (Exception e) { return; } // עוד נכתב — בבדיקה הבאה
+    p.edit().putLong("cleaned", id).apply();
+    JSONArray k = o.optJSONArray("keep");
+    if (!o.optBoolean("clean") || k == null) return;
+    java.util.Set<String> keep = new java.util.HashSet<>();
+    for (int i = 0; i < k.length(); i++) keep.add(k.optString(i));
+    int n = 0;
+    for (File dir : ctx.getExternalFilesDirs(null)) {
+      if (dir == null) continue;
+      File[] list = dir.listFiles();
+      if (list != null) for (File f : list)
+        if (f.isFile() && f.getName().matches(".+\\.(mp4|mov|m4v|webm)") && !keep.contains(f.getName()) && f.delete()) n++;
+    }
+    File[] th = new File(ctx.getCacheDir(), "thumbs").listFiles();
+    if (th != null) for (File f : th) if (!keep.contains(f.getName().replaceAll("\\.jpg(\\.tmp)?$", ""))) f.delete();
+    log(ctx, "daily clean: deleted " + n);
   }
 
   static File newestSync(Context ctx) { return newest(ctx, "sync"); }
@@ -224,16 +245,16 @@ final class Sync {
       b.setSmallIcon(android.R.drawable.stat_notify_error).setAutoCancel(true);
     } else {
       b.setSmallIcon(android.R.drawable.stat_sys_download).setProgress(0, 0, true).setOngoing(true);
-      if (!s.waiting) stopAction(ctx, b, s);
+      stopAction(ctx, b, s);
     }
     nm.notify(ID, b.build());
   }
 
-  // ההתראה של השירות הקדמי ברגע החיבור, עד שמגיעה הודעה מהמחשב
+  // ההתראה של השירות הקדמי כשהעדכון מתחיל (מיד מוחלפת בהודעה מהמחשב)
   static Notification connectedNotification(Context ctx) {
     NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
     return builder(ctx, nm).setSmallIcon(android.R.drawable.stat_sys_download)
-        .setContentTitle("הנגן מחובר").setContentText("מחכה לתוכנה במחשב…")
+        .setContentTitle("מתחיל עדכון").setContentText("אל תנתקו את הנגן")
         .setProgress(0, 0, true).setOngoing(true).build();
   }
 
@@ -275,10 +296,11 @@ final class Sync {
 
   // רק מעקב אחד בכל רגע (גם החיבור לחשמל וגם ה-JobScheduler יכולים להפעיל אותו)
   // אם כבר יש מעקב — מחכים שיסתיים (ולא חוזרים מיד, אחרת ה-JobScheduler מריץ את העבודה שוב ושוב)
-  static void watch(Context ctx, long maxMs) { watch(ctx, maxMs, null); }
+  static void watch(Context ctx, long maxMs) { watch(ctx, maxMs, null, null); }
 
   // onFinal (מהשירות הקדמי): נקרא רגע לפני ההתראה הסופית (מעודכן / נעצר / שגיאה) — ואז המעקב מסתיים
-  static void watch(Context ctx, long maxMs, Runnable onFinal) {
+  // onShow (מהשירות): נקרא פעם אחת, רגע לפני ההתראה הראשונה — כלומר כשהעדכון באמת התחיל
+  static void watch(Context ctx, long maxMs, Runnable onShow, Runnable onFinal) {
     long end = System.currentTimeMillis() + maxMs;
     while (!watching.compareAndSet(false, true)) {
       if (System.currentTimeMillis() > end || !charging(ctx)) return;
@@ -286,17 +308,18 @@ final class Sync {
     }
     NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
     log(ctx, "watch start, charging=" + charging(ctx) + ", notifications=" + (Build.VERSION.SDK_INT >= 24 ? nm.areNotificationsEnabled() : true));
-    try { watchLoop(ctx, end - System.currentTimeMillis(), onFinal); }
+    try { watchLoop(ctx, end - System.currentTimeMillis(), onShow, onFinal); }
     catch (Throwable t) { log(ctx, "watch error: " + t); }
     finally { watching.set(false); log(ctx, "watch end, charging=" + charging(ctx)); }
   }
 
-  private static void watchLoop(Context ctx, long maxMs, Runnable onFinal) {
+  private static void watchLoop(Context ctx, long maxMs, Runnable onShow, Runnable onFinal) {
     android.content.SharedPreferences prefs = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE);
     long end = System.currentTimeMillis() + maxMs, seen = prefs.getLong("announced", 0);
     Status last = null;
     String shown = null; // הודעת המצב שמוצגת עכשיו (כותרת+טקסט), כדי לא לעדכן סתם
     while (System.currentTimeMillis() < end) {
+      cleanIfAsked(ctx);
       Status s = read(ctx);
       if (s.msg) {
         String key = s.id + s.title + s.text + s.stopping + s.stopSlow;
@@ -308,6 +331,7 @@ final class Sync {
           if (onFinal != null) return;
           shown = key;
         } else if (s.active) {
+          if (shown == null && onShow != null) { onShow.run(); onShow = null; }
           if (!key.equals(shown)) { notifyMsg(ctx, s); shown = key; log(ctx, "notify msg: " + s.title + " / " + s.text); }
         } else if (shown != null && !s.error) { cancel(ctx); shown = null; } // המחשב הפסיק לשלוח
         if (!charging(ctx)) { if (s.active) cancel(ctx); return; }
@@ -317,6 +341,7 @@ final class Sync {
       shown = null;
       if (s.id > seen && (s.active || s.finished)) {
         if (last == null || last.finished != s.finished) log(ctx, "notify copy: " + s.json());
+        if (s.active && onShow != null) { onShow.run(); onShow = null; }
         if (s.finished && onFinal != null) onFinal.run();
         notifyStatus(ctx, s);
         last = s;

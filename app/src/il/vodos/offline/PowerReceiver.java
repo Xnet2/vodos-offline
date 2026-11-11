@@ -24,8 +24,8 @@ public class PowerReceiver extends BroadcastReceiver {
     public void onReceive(Context ctx, Intent intent) { Sync.requestStop(ctx); }
   }
 
-  // המעקב רץ כ"שירות קדמי" (עם ההתראה "הנגן מחובר") — אחרת אנדרואיד הורג את האפליקציה ברקע אחרי כמה שניות,
-  // עוד לפני שהמחשב מתחיל להעתיק. בסוף (הנגן מעודכן / נעצר / נותק) ההתראה הקבועה יורדת
+  // המעקב רץ כשירות ברקע, בלי שום התראה, עד שלוחצים "התחל עדכון" במחשב. כשהעדכון מתחיל הוא הופך ל"שירות קדמי"
+  // (עם ההתראה) — אחרת אנדרואיד הורג את האפליקציה באמצע ההעתקה. בסוף (מעודכן / נעצר / נותק) ההתראה הקבועה יורדת
   public static class Watch extends Service {
     private volatile boolean running;
 
@@ -33,17 +33,21 @@ public class PowerReceiver extends BroadcastReceiver {
     public int onStartCommand(Intent intent, int flags, int id) {
       if (!running) {
         running = true;
-        startForeground(Sync.ID, Sync.connectedNotification(this));
         new Thread(() -> {
           try { Thread.sleep(2000); } catch (InterruptedException e) {}
           // מטען קיר (לא מחשב) — אין מה לחכות לו
-          if (Sync.usb(this)) Sync.watch(this, 60 * 60 * 1000, () -> stopForeground(true));
-          else Sync.log(this, "not usb — no watch");
+          // אחרי עדכון אחד ממשיכים לחכות — אפשר ללחוץ במחשב "עדכן שוב" בלי לנתק
+          long end = System.currentTimeMillis() + 3 * 60 * 60 * 1000;
+          if (!Sync.usb(this)) Sync.log(this, "not usb — no watch");
+          while (Sync.usb(this) && System.currentTimeMillis() < end) {
+            Sync.watch(this, end - System.currentTimeMillis(), () -> startForeground(Sync.ID, Sync.connectedNotification(this)), () -> stopForeground(true));
+            try { Thread.sleep(2000); } catch (InterruptedException e) { break; }
+          }
           stopForeground(true);
           running = false; stopSelf();
         }).start();
       }
-      return START_NOT_STICKY;
+      return START_STICKY; // אם אנדרואיד סוגר את השירות בזמן ההמתנה — הוא מופעל מחדש
     }
 
     @Override
