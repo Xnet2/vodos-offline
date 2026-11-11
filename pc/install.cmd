@@ -29,8 +29,14 @@ copy /y "%SRC%status.html" "%DEST%\" >nul 2>&1
 for /f "delims=" %%n in ('where node 2^>nul') do set "NODE=%%n" & goto found
 rem אין Node.js — מתקינים אותו (התוכנה כתובה ב-Node)
 echo מתקין Node.js...
-winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+rem --source winget: בלי חנות מיקרוסופט, שנכשלת מאחורי סינון (NetFree) ואז winget לא מתקין כלום
+winget install -e --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements
 set "NODE=%ProgramFiles%\nodejs\node.exe"
+if exist "%NODE%" goto found
+rem גם winget לא הצליח — מורידים את node.exe לבד לתיקיית התוכנה (בלי התקנה)
+echo מוריד את Node.js...
+curl.exe -sfL -o "%DEST%\node.exe" https://nodejs.org/dist/v22.12.0/win-x64/node.exe
+set "NODE=%DEST%\node.exe"
 if not exist "%NODE%" echo לא הצלחתי להתקין את Node.js. התקינו אותו מ-nodejs.org והריצו שוב. & pause & exit /b 1
 :found
 rem בקובץ ה-VBS רק נתיבים קצרים (באנגלית) — הוא לא קורא עברית

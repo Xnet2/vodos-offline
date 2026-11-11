@@ -128,6 +128,12 @@ function poll() {
   });
 }
 $('stop').addEventListener('click', function () { $('stop').disabled = true; $('stop').textContent = 'עוצר…'; fetch('/stop', { method: 'POST' }).then(poll); });
+// החלון נפתח מחדש בכל חיבור של הנגן — הלשונית החדשה מבקשת מהישנות להיסגר, כדי שלא יצטברו כפולות
+try {
+  var bc = new BroadcastChannel('vodos-status');
+  bc.onmessage = function (e) { if (e.data === 'new') window.close(); };
+  bc.postMessage('new');
+} catch (e) {}
 poll(); setInterval(poll, 1000);
 </script>
 </body>

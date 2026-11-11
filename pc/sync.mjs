@@ -500,6 +500,11 @@ function startServer() {
     res.writeHead(404); res.end();
   }).on('error', (e) => log('חלון המצב לא עלה:', e.code || e.message)).listen(47800, '127.0.0.1');
 }
+// בכל חיבור של הנגן — פותחים את חלון המצב בדפדפן (לשונית ישנה של החלון נסגרת לבד, ראו status.html)
+function openWindow() {
+  try { spawn('cmd.exe', ['/c', 'start', '""', 'http://127.0.0.1:47800/'], { windowsHide: true, detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref(); }
+  catch (e) { log('לא הצלחתי לפתוח את חלון המצב:', e.message); }
+}
 
 // ---- לולאה ראשית ----
 async function findDevice() {
@@ -527,6 +532,7 @@ async function main() {
     if (!dev && wasConnected) Object.assign(ui, { title: '', text: '', error: false, done: 0, total: 0 }); // נותק
     if (dev && !wasConnected) {
       log('מכשיר חובר: ' + dev.device);
+      openWindow();
       await syncDevice(dev);
     }
     wasConnected = !!dev;
