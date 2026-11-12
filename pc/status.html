@@ -38,13 +38,12 @@ header p{font-size:14px;color:var(--gray)}
 .stop[disabled]{opacity:.5;cursor:default}
 .go{flex:none;padding:13px 26px;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;font-size:17px;box-shadow:0 4px 14px rgba(254,44,85,.3)}
 .go.again{padding:11px 20px;font-size:15px;font-weight:700;background:var(--bg);color:var(--ink);box-shadow:none}
-.go[disabled],.daily[disabled]{opacity:.5;cursor:default}
+.go[disabled]{opacity:.5;cursor:default}
 .btns{flex:none;display:flex;flex-direction:column;gap:8px;align-items:stretch}
-.daily{padding:10px 18px;border-radius:12px;background:var(--bg);color:var(--ink);font-weight:700;font-size:14.5px}
-.daily small{display:block;font-size:12px;font-weight:600;color:var(--gray)}
+.btns[hidden]{display:none}
 .main.ask .ic{background:#fff0f3;color:var(--accent)}
 
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
 .card{padding:16px;border-radius:16px;background:var(--card);box-shadow:0 2px 12px rgba(0,0,0,.05)}
 .card h3{font-size:13px;color:var(--gray);font-weight:700;margin-bottom:8px}
 .card b{display:block;font-size:19px;font-weight:800}
@@ -76,13 +75,11 @@ summary{padding:14px 16px;font-weight:700;cursor:pointer}
     <button class="stop" id="stop" hidden>עצור</button>
     <div class="btns" id="btns" hidden>
       <button class="go" id="go">התחל עדכון</button>
-      <button class="daily" id="daily">עדכון יומי<small>מחליף הכל בחדשים ביותר</small></button>
     </div>
   </section>
 
   <div class="grid">
     <div class="card"><h3>הנגן</h3><b id="dev">—</b><small id="devSub"></small></div>
-    <div class="card"><h3>במחשב</h3><b id="pc">—</b><small id="pcSub"></small></div>
     <div class="card"><h3>עדכון אחרון</h3><b id="last">—</b><small id="lastSub"></small></div>
   </div>
   <p class="note" id="settings"></p>
@@ -123,17 +120,15 @@ function render(s) {
   // "התחל עדכון" — כשהנגן מחובר ואין עדכון באמצע; אחרי עדכון: "עדכן שוב"
   var go = $('go'), canStart = s.connected && !s.busy;
   $('btns').hidden = !canStart;
-  if (canStart && !starting) { go.disabled = false; $('daily').disabled = false; go.textContent = s.title ? 'עדכן שוב' : 'התחל עדכון'; go.className = 'go' + (s.title ? ' again' : ''); }
+  if (canStart && !starting) { go.disabled = false; go.textContent = s.title ? 'עדכן שוב' : 'התחל עדכון'; go.className = 'go' + (s.title ? ' again' : ''); }
   if (s.busy) starting = false;
   $('stop').hidden = !s.busy; $('stop').disabled = !!s.stopping; $('stop').textContent = s.stopping ? 'עוצר…' : 'עצור';
 
   $('dev').textContent = s.connected ? 'מחובר' + (s.device ? ' · ' + s.device : '') : 'לא מחובר';
   $('devSub').textContent = s.connected && s.storage ? 'מעתיק ל: ' + s.storage + (s.free ? ' · פנוי ' + gb(s.free) : '') : '';
-  $('pc').textContent = s.cache ? s.cache.videos + ' סרטונים' : '—';
-  $('pcSub').textContent = (s.cache ? gb(s.cache.bytes) + ' מתוך ' + s.settings.pcGB + 'GB' : '') + (s.downloading ? ' · מוריד עכשיו…' : '');
   $('last').textContent = s.last ? ago(s.last.at) : 'עוד לא היה';
   $('lastSub').textContent = s.last ? (s.last.copied ? 'נוספו ' + s.last.copied + ' סרטונים' : 'לא היו סרטונים חדשים') + ' · ' + s.last.videos + ' בנגן' : '';
-  $('settings').textContent = 'נפח במחשב ' + s.settings.pcGB + 'GB · נפח מירבי בנגן ' + s.settings.deviceGB + 'GB · ' + s.likes + ' אהבתי · ' + s.watched + ' נצפו. משנים את הנפח בהגדרות באפליקציה שבנגן.';
+  $('settings').textContent = 'נפח מירבי בנגן ' + s.settings.deviceGB + 'GB · ' + s.likes + ' אהבתי · ' + s.watched + ' נצפו. המחשב לא שומר סרטונים: בכל עדכון הוא מוריד את הכי חדשים ומעתיק אותם מיד לנגן. את הנפח משנים בהגדרות באפליקציה שבנגן.';
   var log = $('log'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
   log.textContent = s.log.join('\n');
   if (atEnd) log.scrollTop = log.scrollHeight;
@@ -151,16 +146,10 @@ try {
   bc.onmessage = function (e) { if (e.data === 'new') window.close(); };
   bc.postMessage('new');
 } catch (e) {}
-function start(fresh) {
-  starting = true; $('go').disabled = true; $('daily').disabled = true;
-  if (!fresh) $('go').textContent = 'מתחיל…';
-  fetch(fresh ? '/start?fresh=1' : '/start', { method: 'POST' }).then(poll);
+$('go').addEventListener('click', function () {
+  starting = true; $('go').disabled = true; $('go').textContent = 'מתחיל…';
+  fetch('/start', { method: 'POST' }).then(poll);
   setTimeout(function () { starting = false; }, 15000);
-}
-$('go').addEventListener('click', function () { start(false); });
-// עדכון יומי: מוחק מהנגן את כל הסרטונים (חוץ מ"אהבתי") וממלא אותו בחדשים ביותר, עד הנפח שנבחר
-$('daily').addEventListener('click', function () {
-  if (confirm('עדכון יומי מוחק מהנגן את כל הסרטונים (חוץ מאלה שסימנתם "אהבתי") וממלא אותו מחדש בסרטונים הכי חדשים.\n\nלהמשיך?')) start(true);
 });
 poll(); setInterval(poll, 1000);
 </script>

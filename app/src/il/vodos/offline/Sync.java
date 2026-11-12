@@ -18,7 +18,8 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 
 // מצב ההעתקה מהמחשב. התוכנה במחשב שולחת קודם sync-<זמן>.json עם רשימת הקבצים שבדרך (האחרון ברשימה הוא ה-index).
-// ההתקדמות = כמה מהקבצים כבר הגיעו. אם כבר שתי דקות לא הגיע כלום והרשימה לא הושלמה — ההעתקה נקטעה (stalled).
+// ההתקדמות = כמה מהקבצים כבר הגיעו. המחשב מוריד ומעתיק במקביל, אז סרטון שלא ירד לא יגיע — הסוף הוא כשמגיעה
+// הרשימה (index, האחרון ברשימה). אם כבר 5 דקות לא הגיע כלום והרשימה לא הושלמה — ההעתקה נקטעה (stalled).
 final class Sync {
   static final class Status {
     boolean active, finished, stalled;
@@ -129,17 +130,19 @@ final class Sync {
       s.session = so.optString("session");
       JSONArray files = so.getJSONArray("files");
       s.total = files.length();
+      boolean last = false;
       for (int i = 0; i < files.length(); i++) {
         String n = files.getString(i);
         if (n.matches(".+\\.(mp4|mov|m4v|webm)")) s.videos++;
         File f = new File(sync.getParentFile(), n);
-        if (f.length() > 0) { s.done++; newest = Math.max(newest, f.lastModified()); }
+        if (f.length() > 0) { s.done++; newest = Math.max(newest, f.lastModified()); if (i == files.length() - 1) last = true; }
       }
+      if (last) s.done = s.total; // הרשימה הגיעה — מה שלא הגיע עד עכשיו לא ירד, ולא יגיע
     } catch (Exception e) {
       return new Status(); // הקובץ עוד נכתב — ננסה שוב בבדיקה הבאה
     }
     s.finished = s.done >= s.total;
-    s.active = !s.finished && age(sync.getName() + ":" + s.done, newest) < 120000;
+    s.active = !s.finished && age(sync.getName() + ":" + s.done, newest) < 300000;
     s.stalled = !s.finished && !s.active;
     return s;
   }

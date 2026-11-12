@@ -1,9 +1,8 @@
 // VODOS לנגן M36 — רץ ברקע במחשב:
-//  • כל רבע שעה מוריד למחשב את הסרטונים החדשים מכל המקורות (מהטבלה של האתר), עד הנפח שנבחר בהגדרות האפליקציה
-//  • כשמתחבר נגן (או טלפון) שמותקנת בו אפליקציית VODOS — קורא ממנו מה נצפה, מה סומן "אהבתי" ואת ההגדרות (state-*.json),
-//    ומעתיק אליו את מה שחסר, יחד עם קובץ רשימה (index-*.json) לאפליקציה VODOS שבנגן
-//  האפליקציה בנגן מוחקת בעצמה סרטונים שכבר לא ברשימה, כך שהנגן לא מתמלא: סרטונים שנצפו מתחלפים בחדשים,
-//  ו"אהבתי" נשארים תמיד ולא נכללים במכסה.
+//  • כשמתחבר נגן (או טלפון) שמותקנת בו אפליקציית VODOS — פותח את חלון המצב בדפדפן, ומחכה ללחיצה על "התחל עדכון"
+//  • בעדכון: קורא מהנגן מה נצפה, מה סומן "אהבתי" ואת ההגדרות (state-*.json), מוריד את הסרטונים הכי חדשים
+//    ומעתיק כל אחד לנגן מיד, עם קובץ רשימה (index-*.json) לאפליקציה. המחשב לא שומר סרטונים.
+//  האפליקציה בנגן מוחקת סרטונים שכבר לא ברשימה, כך שהנגן תמיד על הכי חדשים; "אהבתי" נשארים תמיד ולא נכללים במכסה.
 // שימוש:  node sync.mjs          (ברקע, כמו בהפעלה האוטומטית)
 //         node sync.mjs --once   (סנכרון אחד עכשיו, אם הנגן מחובר)
 import { createHash } from 'node:crypto';
@@ -11,7 +10,7 @@ import http from 'node:http';
 import { setDefaultResultOrder } from 'node:dns';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
@@ -19,7 +18,6 @@ import { pipeline } from 'node:stream/promises';
 
 const GB = 1024 ** 3;
 const KEEP_FREE = 500 * 1024 ** 2;   // להשאיר לפחות 500MB פנויים בנגן
-const REFRESH_MS = 15 * 60 * 1000;   // כל כמה זמן לבדוק סרטונים חדשים
 const POLL_MS = 3000;                // כל כמה זמן לבדוק אם הנגן חובר (בדיקה מהירה)
 const SITE = 'https://xnet2.github.io/VOD/';
 
@@ -27,7 +25,7 @@ setDefaultResultOrder('ipv4first'); // דרך נטפרי חלק מהאתרים �
 
 const here = dirname(fileURLToPath(import.meta.url));
 const HOME = join(process.env.LOCALAPPDATA || here, 'VODOS-M36');
-const CACHE = join(HOME, 'videos');
+const CACHE = join(HOME, 'videos'); // תיקייה זמנית: סרטון יושב בה רק עד שהוא מועתק לנגן
 mkdirSync(CACHE, { recursive: true });
 
 // ---- מצב לחלון "VODOS — מצב" במחשב (http://127.0.0.1:47800) ----
@@ -63,23 +61,21 @@ let likes = loadJSON('likes.json', []);                  // [{f,s,t,ts}]
 const watched = new Set(loadJSON('watched.json', []));   // שמות קבצים שכבר נצפו בנגן
 const likedNames = () => new Set(likes.map(v => v.f));
 
-// מעדכן מה-state של האפליקציה; מחזיר true אם הנפח במחשב השתנה (וצריך לרענן מחדש)
+// מעדכן מה-state של האפליקציה
 function applyState(text) {
-  let st; try { st = JSON.parse(text); } catch { return false; }
-  const before = settings.pcGB;
+  let st; try { st = JSON.parse(text); } catch { return; }
   const num = (x, d) => (x > 0 && x <= 1024 ? +x : d);
   if (st.settings) settings = { pcGB: num(st.settings.pcGB, settings.pcGB), deviceGB: num(st.settings.deviceGB, settings.deviceGB) };
   if (Array.isArray(st.likes)) likes = st.likes.filter(v => v && typeof v.f === 'string');
   for (const f of st.watched || []) watched.add(f);
   for (const f of watched) { if (watched.size <= 20000) break; watched.delete(f); }
   saveJSON('settings.json', settings); saveJSON('likes.json', likes); saveJSON('watched.json', [...watched]);
-  log(`מהנגן: ${likes.length} אהבתי, ${(st.watched || []).length} נצפו, נפח ${settings.pcGB}GB במחשב / ${settings.deviceGB}GB לנגן`);
-  return settings.pcGB !== before;
+  log(`מהנגן: ${likes.length} אהבתי, ${(st.watched || []).length} נצפו, נפח ${settings.deviceGB}GB לנגן`);
 }
 
 // מריץ את mtp.ps1; כל שורת JSON שהוא מדפיס מגיעה ל-onLine מיד (להתקדמות), וכולן חוזרות בסוף
 // העתקה לאחסון שאסור לכתוב אליו (למשל הזיכרון הפנימי באנדרואיד 11+) יכולה להיתקע לתמיד — לכן לכל פעולה יש זמן מקסימלי
-const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 60 * 60e3 };
+const TIMEOUT = { find: 60e3, put: 60e3, state: 120e3, pull: 60e3, push: 4 * 3600e3 }; // push — כולל ההורדות
 // האחסון בנגן שבו נמצאים הסרטונים (נשמר רק כשבאמת היה בו index — כדי לא "להינעל" על הזיכרון הפנימי)
 let storagePref = loadJSON('storage2.json', {}).name || '';
 let session = '';          // מזהה החיבור הנוכחי (נשלח בהודעות לנגן; העצירה מתייחסת אליו)
@@ -195,7 +191,7 @@ async function loadVideos(cfg) {
   });
 }
 
-// ---- הורדה למחשב ----
+// ---- הורדה (לתיקייה הזמנית, בזמן עדכון) ----
 const failed = new Map(); // כתובת → מתי לנסות שוב (למשל קובץ שנטפרי עוד לא אישר)
 const nameOf = (v) => {
   const ext = (fileKey(v.videoUrl).match(/\.(mp4|mov|m4v|webm)$/i) || [, 'mp4'])[1].toLowerCase();
@@ -262,18 +258,6 @@ function faststart(path) {
   return true;
 }
 
-let refreshing = null, refreshError = null;
-let selection = null; // { videos, sources }
-let onDownload = null; // בזמן חיבור: מדווח לנגן על כל סרטון שהורד
-
-function refresh() {
-  if (!refreshing) {
-    refreshError = null;
-    refreshing = doRefresh().catch(e => { refreshError = e; log('שגיאה ברענון:', e.message); }).finally(() => { refreshing = null; });
-  }
-  return refreshing;
-}
-
 // ---- הודעות מצב לנגן: status-<זמן>.json, שהאפליקציה מציגה כהתראה ובפס שבפיד ----
 // {title, text, done?, error?} — נשלחות אחת-אחת; אם בינתיים הגיעה חדשה יותר, הביניים מדולגות
 const STATUS_DIR = join(HOME, 'status');
@@ -298,124 +282,137 @@ function status(title, text, extra = {}) {
 }
 async function statusFlush() { while (statusBusy) await statusBusy; }
 
-async function doRefresh() {
+// ---- עדכון: הכל קורה רק כשלוחצים "התחל עדכון" — המחשב לא שומר סרטונים ----
+// 1. בוחרים מהטבלה את הסרטונים הכי חדשים שלא נצפו, עד הנפח שנבחר לנגן. מה שכבר בנגן נספר לפי הגודל שלו שם;
+//    לחדשים בודקים את הגודל בשרת לפני ההורדה
+// 2. האפליקציה בנגן מוחקת כל סרטון שלא ברשימה (חוץ מ"אהבתי") — כך יש מקום, והנגן תמיד על הכי חדשים
+// 3. מורידים לתיקייה זמנית, שלושה במקביל, ו-mtp.ps1 מעתיק כל סרטון לנגן ברגע שהוא מוכן ומוחק אותו מהמחשב
+// 4. בסוף נכתבת הרשימה (index-*.json) — רק עם מה שבאמת הגיע
+const EST = 12 * 1024 ** 2; // שרת שלא אומר מה הגודל — מניחים גודל ממוצע של סרטון
+function clearTmp() { try { for (const f of readdirSync(CACHE)) rm(join(CACHE, f)); } catch {} }
+function touch(p) { try { writeFileSync(p, ''); } catch {} }
+
+// הגודל של סרטון בשרת, בלי להוריד אותו (בקשה לבייט הראשון בלבד); -1 — לא זמין (או דף "נשלח לבדיקה" של נטפרי)
+async function remoteSize(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 VODOS-M36', Range: 'bytes=0-0' } });
+    ctrl.abort(); // את התוכן עצמו לא צריך
+    if (!res.ok || !/video|octet-stream/i.test(res.headers.get('content-type') || '')) return -1;
+    const m = (res.headers.get('content-range') || '').match(/\/(\d+)$/);
+    if (m) return +m[1];
+    const len = +res.headers.get('content-length');
+    return res.status === 200 && len > 1 ? len : EST;
+  } catch { return -1; } finally { clearTimeout(timer); }
+}
+
+// st — מה שנקרא מהנגן: have (כל הקבצים), sizes (הסרטונים והגודל שלהם), free
+async function update(st, KEEP) {
+  clearTmp();
+  status('בודק מה חדש…', 'קורא את רשימת הסרטונים' + KEEP);
   const cfg = await loadConfig();
-  const MAX_BYTES = settings.pcGB * GB;
-  const liked = likedNames();
-  // מה שכבר נצפה לא מורידים שוב; "אהבתי" כבר שמורים בצד ולא נספרים בנפח
-  const all = (await loadVideos(cfg)).filter(v => !watched.has(nameOf(v)) && !liked.has(nameOf(v)));
-  const picked = [], sources = {};
-  let bytes = 0, fresh = 0;
-  const queue = all[Symbol.iterator]();
-  // הורדה בשלושה ערוצים במקביל, מהחדש לישן, עד שמגיעים לנפח
-  async function worker() {
-    for (const v of queue) {
-      if (bytes >= MAX_BYTES || stopRequested) return;
-      const name = nameOf(v), path = join(CACHE, name);
-      if (!existsSync(path)) {
-        if ((failed.get(v.videoUrl) || 0) > Date.now()) continue;
-        try { await download(v.videoUrl, path); fresh++; if (onDownload) onDownload(fresh); }
-        catch (e) { failed.set(v.videoUrl, Date.now() + 6 * 3600 * 1000); continue; }
-      }
-      bytes += statSync(path).size;
-      picked.push({ ...v, f: name });
+  const liked = likedNames(), sizes = st.sizes || {}, onDevice = new Set(st.have || []);
+  const all = (await loadVideos(cfg)).filter(v => !watched.has(nameOf(v)) && !liked.has(nameOf(v)) && (failed.get(v.videoUrl) || 0) <= Date.now());
+  // "אהבתי" שבנגן נשארים תמיד, ולא נספרים בנפח
+  const keepLiked = likes.filter(v => onDevice.has(v.f));
+  // המקום של כל הסרטונים שבנגן (חוץ מ"אהבתי") מתפנה — וכל סרטון שנבחר נספר, גם אם הוא כבר שם
+  let room = (st.free || 0) - KEEP_FREE, used = 0;
+  for (const f in sizes) if (!liked.has(f)) room += sizes[f];
+  const budget = settings.deviceGB * GB, picked = [];
+  // מהחדש לישן, עד הנפח — ונעצרים בראשון שלא נכנס, כדי שבנגן יהיו בדיוק הכי חדשים
+  scan: for (let i = 0; i < all.length; i += 8) {
+    if (stopRequested) return;
+    const batch = all.slice(i, i + 8).map(v => ({ ...v, f: nameOf(v) }));
+    const got = await Promise.all(batch.map(v => (sizes[v.f] != null ? sizes[v.f] : remoteSize(v.videoUrl))));
+    for (let j = 0; j < batch.length; j++) {
+      const v = batch[j], s = got[j];
+      if (s < 0) { failed.set(v.videoUrl, Date.now() + 6 * 3600e3); continue; }
+      if (used + s > budget || s > room) break scan;
+      room -= s; used += s;
+      picked.push({ ...v, have: sizes[v.f] != null });
     }
   }
-  await Promise.all([worker(), worker(), worker()]);
-  // נעצר באמצע — הרשימה חלקית, אז לא מחליפים את הבחירה הקודמת ולא מוחקים כלום מהמחשב
-  if (stopRequested) { log(`ההורדה הופסקה (${fresh} חדשים הורדו)`); return; }
-  picked.sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
-  // שלושת הערוצים יכולים לעבור קצת את הנפח — חותכים לפי הסדר מהחדש לישן
-  bytes = 0;
-  for (let i = 0; i < picked.length; i++) {
-    bytes += statSync(join(CACHE, picked[i].f)).size;
-    if (bytes > MAX_BYTES) { bytes -= statSync(join(CACHE, picked[i].f)).size; picked.length = i; break; }
-  }
+  if (stopRequested) return;
+  const toGet = picked.filter(v => !v.have);
+  log(`עדכון: ${picked.length} סרטונים (${(used / GB).toFixed(2)}GB מתוך ${settings.deviceGB}GB), ${toGet.length} חדשים להוריד, ועוד ${keepLiked.length} אהבתי`);
 
-  // תמונה לכל מקור
+  // תמונה לכל מקור (קטנות — מורידים לפני ההעתקה)
+  const sources = {};
   for (const v of picked) {
     if (sources[v.source]) continue;
     const src = { name: v.sourceName || v.source };
-    let av = (cfg.SOURCE_AVATARS || {})[v.source] || v.avatar || '';
+    const av = (cfg.SOURCE_AVATARS || {})[v.source] || v.avatar || '';
     if (av.startsWith('data:')) src.avatar = av;
     else if (av) {
       const url = new URL(av, SITE).href;
       const file = 'avatar-' + v.source.replace(/[^a-z0-9]/gi, '') + '.' + ((url.match(/\.(png|jpe?g|webp|gif)(\?|$)/i) || [, 'png'])[1].toLowerCase());
-      if (!existsSync(join(CACHE, file))) { try { await download(url, join(CACHE, file), { video: false }); } catch {} }
-      if (existsSync(join(CACHE, file))) src.avatar = file;
+      if (onDevice.has(file)) src.avatar = file;
+      else { try { await download(url, join(CACHE, file), { video: false }); src.avatar = file; } catch {} }
     }
     sources[v.source] = src;
   }
-
-  const keep = new Set(picked.map(v => v.f).concat([...liked], Object.values(sources).map(s => s.avatar).filter(a => a && !a.startsWith('data:'))));
-  for (const f of readdirSync(CACHE)) if (!keep.has(f) && !f.startsWith('index-')) rm(join(CACHE, f));
-  selection = { videos: picked, sources };
-  log(`רענון: ${picked.length} סרטונים (${(bytes / GB).toFixed(2)}GB מתוך ${settings.pcGB}GB), ${fresh} חדשים הורדו`);
-}
-
-// ---- העתקה לנגן ----
-// have — הקבצים שכבר בנגן (הם לא תופסים מקום נוסף)
-// fresh — עדכון יומי: כל הסרטונים בנגן נמחקים (חוץ מ"אהבתי"), והנגן מתמלא מחדש בחדשים ביותר
-async function push(free, have, fresh) {
-  if (!selection) await refresh();
-  if (!selection) return;
-  const liked = likedNames(), onDevice = new Set(have);
-  const size = (f) => { try { return statSync(join(CACHE, f)).size; } catch { return -1; } };
-  // "אהבתי" — תמיד, אם הם בנגן או במחשב; לא נספרים בנפח
-  const keepLiked = likes.filter(v => onDevice.has(v.f) || size(v.f) >= 0);
-  // השאר: מה שלא נצפה, מהחדש לישן, עד הנפח שנבחר לנגן — ובלי למלא את המקום הפנוי בנגן
-  let room = free - KEEP_FREE - keepLiked.reduce((a, v) => a + (onDevice.has(v.f) ? 0 : size(v.f)), 0), used = 0;
-  // ביומי: המקום של כל הסרטונים שבנגן (חוץ מ"אהבתי") מתפנה — וכל סרטון שנבחר נספר, גם אם הוא כבר שם
-  if (fresh) room += have.filter(f => /\.(mp4|mov|m4v|webm)$/.test(f) && !liked.has(f)).reduce((a, f) => a + Math.max(0, size(f)), 0);
-  const videos = selection.videos.filter(v => {
-    if (watched.has(v.f) || liked.has(v.f)) return false;
-    const s = size(v.f); if (s < 0) return false;
-    if (used + s > settings.deviceGB * GB) return false;
-    if (fresh || !onDevice.has(v.f)) { if (s > room) return false; room -= s; }
-    used += s; return true;
-  });
-  const sources = { ...selection.sources };
   for (const v of keepLiked) if (!sources[v.s]) sources[v.s] = { name: v.s };
 
-  for (const f of readdirSync(CACHE)) if (f.startsWith('index-')) rm(join(CACHE, f));
   const index = 'index-' + Date.now() + '.json';
-  writeFileSync(join(CACHE, index), JSON.stringify({
-    created: new Date().toISOString(), sources,
-    videos: keepLiked.map(v => ({ f: v.f, s: v.s, t: v.t, ts: v.ts }))
-      .concat(videos.map(v => ({ f: v.f, s: v.source, t: v.text, ts: v.timestamp }))),
-  }));
-  const names = keepLiked.map(v => v.f).concat(videos.map(v => v.f), Object.values(sources).map(s => s.avatar).filter(a => a && !a.startsWith('data:')), [index]);
+  const names = keepLiked.map(v => v.f).concat(picked.map(v => v.f), Object.values(sources).map(s => s.avatar).filter(a => a && !a.startsWith('data:')), [index]);
   for (const f of readdirSync(HOME)) if (/^push-.*\.txt$/.test(f)) rm(join(HOME, f));
-  const list = join(HOME, 'push-' + Date.now() + '.txt'); // שם חדש בכל פעם — לא נתקעים על קובץ ישן
+  const list = join(HOME, 'push-' + Date.now() + '.txt');
   writeFileSync(list, names.join('\n'), 'utf8');
 
-  // ההתקדמות מוצגת בנגן עצמו: mtp.ps1 שולח קודם רשימה (sync-*.json), והאפליקציה סופרת מה כבר הגיע
-  log((fresh ? 'עדכון יומי: ' : '') + `מעתיק לנגן (${videos.length} סרטונים ברשימה, ${(used / GB).toFixed(2)}GB, ועוד ${keepLiked.length} אהבתי)…`);
-  const out = await ps(['push', '-Local', CACHE, '-List', list].concat(fresh ? ['-Clean', '1'] : []), (o) => {
-    // ההתקדמות גם בחלון במחשב
-    if (o.todo != null) Object.assign(ui, { title: 'מעתיק סרטונים לנגן', text: o.todo ? `0 מתוך ${o.todo}` : 'אין קבצים חדשים להעתיק', done: 0, total: o.todo });
-    if (o.file) Object.assign(ui, { done: o.done, text: `${o.done} מתוך ${ui.total}` });
+  // ההורדות רצות ברקע בזמן ש-mtp.ps1 מעתיק; סרטון שנכשל מסומן <שם>.skip, ו-mtp.ps1 ממשיך לבא
+  let stopDl = false, got = 0;
+  const arrived = new Set(), queue = toGet[Symbol.iterator]();
+  async function dl() {
+    for (const v of queue) {
+      const p = join(CACHE, v.f);
+      if (stopDl || stopRequested) { touch(p + '.skip'); continue; }
+      try { await download(v.videoUrl, p); arrived.add(v.f); got++; }
+      catch (e) { failed.set(v.videoUrl, Date.now() + 6 * 3600e3); log('הורדה נכשלה:', v.f, e.message); touch(p + '.skip'); }
+    }
+  }
+  const downloads = Promise.all([dl(), dl(), dl()]).then(() => {
+    // הרשימה לאפליקציה — רק מה שכבר בנגן או שירד (נכתבת בשם זמני ואז מקבלת את השם, כדי ש-mtp.ps1 לא יעתיק חצי קובץ)
+    const ok = picked.filter(v => v.have || arrived.has(v.f));
+    writeFileSync(join(CACHE, index + '.tmp'), JSON.stringify({
+      created: new Date().toISOString(), sources,
+      videos: keepLiked.map(v => ({ f: v.f, s: v.s, t: v.t, ts: v.ts }))
+        .concat(ok.map(v => ({ f: v.f, s: v.source, t: v.text, ts: v.timestamp }))),
+    }));
+    renameSync(join(CACHE, index + '.tmp'), join(CACHE, index));
+  }).catch((e) => { log('הרשימה לנגן לא נכתבה:', e.message); touch(join(CACHE, index + '.skip')); }); // שלא יחכה לה לנצח
+
+  status('מעדכן את הנגן', `מוריד ומעתיק ${toGet.length} סרטונים חדשים` + KEEP);
+  await statusFlush();
+  let done = 0, total = 0;
+  const out = await ps(['push', '-Local', CACHE, '-List', list, '-Clean', '1', '-Wait', '1'], (o) => {
+    // ההתקדמות גם בחלון במחשב (בנגן — לפי קובץ ה-sync)
+    if (o.todo != null) { total = o.todo; Object.assign(ui, { title: 'מוריד ומעתיק לנגן', text: total ? `0 מתוך ${total}` : 'אין סרטונים חדשים', done: 0, total }); }
+    if (o.file) { done = o.done; Object.assign(ui, { done, text: `${done} מתוך ${total}` + (got < toGet.length ? ` · הורדו ${got}` : '') }); }
   });
+  stopDl = true;
+  downloads.finally(clearTmp); // הורדה שעוד באמצע — נמחקת כשהיא מסתיימת
   const err = out.find(o => o.error);
   if (err) throw new Error(err.error);
   if (out.some(o => o.timeout)) throw new Error('ההעתקה נתקעה');
   const stopped = out.find(o => o.stopped);
-  if (stopped) { stopRequested = true; log(`ההעתקה הופסקה (${stopped.copied} קבצים הועתקו)`); return; }
+  if (stopped) { stopRequested = true; log(`העדכון הופסק (${stopped.copied} קבצים הועתקו)`); return; }
   const copied = out.filter(o => o.file && o.ok && /\.(mp4|mov|m4v|webm)$/.test(o.file)).length;
-  const bad = out.filter(o => o.file && !o.ok).length;
-  log(`הועתקו ${copied} סרטונים חדשים` + (bad ? `, ${bad} נכשלו` : ''));
-  ui.last = { at: new Date().toISOString(), copied, videos: videos.length + keepLiked.length };
+  const bad = toGet.length - copied;
+  log(`הועתקו ${copied} סרטונים חדשים` + (bad > 0 ? `, ${bad} לא הצליחו` : ''));
+  ui.last = { at: new Date().toISOString(), copied, videos: picked.length + keepLiked.length };
   saveJSON('last.json', ui.last);
-  Object.assign(ui, { title: 'הנגן מעודכן ✓', text: copied ? `נוספו ${copied} סרטונים חדשים` : 'אין סרטונים חדשים', error: false, done: 0, total: 0 });
+  Object.assign(ui, { title: 'הנגן מעודכן ✓', text: (copied ? `נוספו ${copied} סרטונים חדשים` : 'אין סרטונים חדשים') + ` · ${picked.length + keepLiked.length} בנגן`, error: false, done: 0, total: 0 });
 }
 
-async function syncDevice(dev, fresh) {
+
+async function syncDevice(dev) {
   const KEEP = ' · אל תנתקו את הנגן';
   stopRequested = false;
   session = Date.now().toString(36); // מזהה החיבור — נשלח בכל הודעה; עצירה בנגן נכתבת כ-stop-<מזהה>.txt
   ui.busy = true;
-  status(fresh ? 'עדכון יומי' : 'הנגן מחובר למחשב', (fresh ? 'הנגן יתמלא מחדש בסרטונים הכי חדשים…' : 'בודק אם יש סרטונים חדשים…') + KEEP);
-  let last = 0, stopTimer = null, checking = null;
+  status('מתחיל עדכון', 'קורא מהנגן מה כבר נצפה…' + KEEP);
+  let stopTimer = null, checking = null;
   // בדיקה אחת אם ביקשו בנגן לעצור (בדיקות לא חופפות: אם יש אחת באוויר — מחכים לה)
   const checkStop = () => {
     if (stopRequested) return Promise.resolve(true);
@@ -425,11 +422,6 @@ async function syncDevice(dev, fresh) {
       return stopRequested;
     });
     return checking;
-  };
-  onDownload = (n) => {
-    if (Date.now() - last < 8000) return; // לא להציף את הנגן בהודעות
-    last = Date.now();
-    status('המחשב מוריד סרטונים חדשים', `הורדו ${n} עד עכשיו` + KEEP);
   };
   const stoppedMsg = () => status('העדכון הופסק', 'הסרטונים שכבר הגיעו לנגן נשארים. חברו שוב כדי להמשיך', { error: true });
   try {
@@ -441,33 +433,21 @@ async function syncDevice(dev, fresh) {
     if (st && st.timeout) throw new Error('קריאה מהנגן נתקעה');
     Object.assign(ui, { storage: st.storage || '', free: st.free || 0 });
     if (st.hasIndex && st.storage !== storagePref) { storagePref = st.storage; saveJSON('storage2.json', { name: storagePref }); log('אחסון בנגן:', storagePref); }
-    const changed = st && st.state ? applyState(st.state) : false;
-    // עצירה נבדקת: עכשיו, כל 5 שניות בזמן ההורדה, לפני ההעתקה, ולפני כל קובץ בהעתקה (ב-mtp.ps1)
+    if (st && st.state) applyState(st.state);
+    log(`אחסון: ${st.storage}, פנוי ${((st.free || 0) / GB).toFixed(1)}GB`);
+    // עצירה נבדקת: עכשיו, כל 5 שניות בזמן הבחירה, ולפני כל קובץ בהעתקה (ב-mtp.ps1)
     if (await checkStop()) { stoppedMsg(); return; }
     stopTimer = setInterval(checkStop, 5000);
-    if (refreshing) status('המחשב מוריד סרטונים חדשים', 'מחכה שההורדה תסתיים…' + KEEP);
-    await refresh();
-    if ((changed || !selection) && !stopRequested) await refresh(); // הנפח במחשב השתנה — לבחור מחדש
-    clearInterval(stopTimer);
-    onDownload = null;
-    if (await checkStop()) { stoppedMsg(); return; }
-    if (!selection) {
-      status('לא הצלחתי להוריד סרטונים', 'בדקו שיש אינטרנט במחשב, ונסו לחבר שוב', { error: true });
-      return;
-    }
-    status('מכין את ההעתקה לנגן…', (refreshError ? 'אין אינטרנט במחשב — מעתיק את מה שכבר הורד' : 'עוד רגע מתחילים') + KEEP);
-    await statusFlush();
-    if (await checkStop()) { stoppedMsg(); return; }
-    log(`אחסון: ${st.storage}, פנוי ${((st.free || 0) / GB).toFixed(1)}GB`);
-    await push(st.free || 0, st.have || [], fresh); // מכאן ההתקדמות מוצגת בנגן לפי קובץ ה-sync
+    await update(st, KEEP);
     if (stopRequested) stoppedMsg();
   } catch (e) {
-    log('שגיאה בהעתקה:', e.message);
-    status('ההעתקה נכשלה', 'נתקו וחברו שוב את הנגן', { error: true });
+    log('שגיאה בעדכון:', e.message);
+    // בלי אינטרנט אי אפשר לעדכן (המחשב לא שומר סרטונים מראש)
+    const net = /fetch failed|HTTP \d|ENOTFOUND|ECONN|ETIMEDOUT|github|google/i.test(e.message);
+    status(net ? 'אין חיבור לאינטרנט' : 'העדכון נכשל', net ? 'בדקו שיש אינטרנט במחשב ולחצו שוב "התחל עדכון"' : 'נתקו וחברו שוב את הנגן', { error: true });
   } finally {
     clearInterval(stopTimer);
     if (checking) await checking;
-    onDownload = null;
     await statusFlush();
     stopRequested = false;
     ui.busy = false;
@@ -489,17 +469,14 @@ function startServer() {
       res.writeHead(204); return res.end();
     }
     // "התחל עדכון" בחלון — רק אז ניגשים לנגן (עד אז לא נכתב אליו כלום)
-    if (req.method === 'POST' && (req.url === '/start' || req.url === '/start?fresh=1')) {
-      const fresh = req.url.endsWith('fresh=1');
-      if (ui.connected && !ui.busy) { startNow = fresh ? 'fresh' : 'normal'; log(fresh ? 'עדכון יומי מהחלון במחשב' : 'התחלת עדכון מהחלון במחשב'); wake(); }
+    if (req.method === 'POST' && req.url.startsWith('/start')) {
+      if (ui.connected && !ui.busy) { startNow = true; log('התחלת עדכון מהחלון במחשב'); wake(); }
       res.writeHead(204); return res.end();
     }
     if (req.url === '/status') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({
         ...ui, stopping: stopRequested, settings, likes: likes.length, watched: watched.size,
-        cache: selection ? { videos: selection.videos.length, bytes: selection.videos.reduce((a, v) => { try { return a + statSync(join(CACHE, v.f)).size; } catch { return a; } }, 0) } : null,
-        downloading: !!refreshing,
       }));
     }
     if (req.url === '/' || req.url.startsWith('/?')) {
@@ -533,8 +510,7 @@ async function main() {
   }
   ui.last = loadJSON('last.json', null);
   startServer();
-  refresh();
-  setInterval(refresh, REFRESH_MS);
+  clearTmp(); // סרטונים שנשארו מגרסה קודמת (שהורידה מראש למחשב) או מעדכון שנקטע
   let wasConnected = false;
   for (;;) {
     const dev = await findDevice();
@@ -547,7 +523,7 @@ async function main() {
       openWindow();
     }
     wasConnected = !!dev;
-    if (dev && startNow) { const fresh = startNow === 'fresh'; startNow = false; await syncDevice(dev, fresh); continue; }
+    if (dev && startNow) { startNow = false; await syncDevice(dev); continue; }
     if (!dev) startNow = false;
     await new Promise(r => { wake = r; setTimeout(r, POLL_MS); });
   }

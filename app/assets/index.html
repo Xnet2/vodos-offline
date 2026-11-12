@@ -349,10 +349,8 @@ svg{display:block}
     <p class="note" id="stSpace"></p>
 
     <h3>העתקה מהמחשב</h3>
-    <p class="note">ההגדרות עוברות למחשב בחיבור הבא. סרטונים שנצפו מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
-    <div class="row"><div><b>נפח במחשב</b><small>כמה סרטונים להוריד ולשמור במחשב</small></div>
-      <div class="step"><button type="button" data-k="pcGB" data-d="-1">−</button><output id="pcGB"></output><button type="button" data-k="pcGB" data-d="1">+</button></div></div>
-    <div class="row"><div><b>נפח מירבי בנגן</b><small>מעבר לזה נמחקים אוטומטית — קודם מה שנצפה, ואז הישנים. "אהבתי" לא נספרים</small></div>
+    <p class="note">בכל עדכון המחשב מוריד את הסרטונים הכי חדשים ומעתיק אותם מיד לנגן — במחשב לא נשמר כלום. סרטונים ישנים מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
+    <div class="row"><div><b>נפח מירבי בנגן</b><small>כמה סרטונים יהיו בנגן — הכי חדשים עד הנפח הזה. "אהבתי" לא נספרים</small></div>
       <div class="step"><button type="button" data-k="deviceGB" data-d="-1">−</button><output id="deviceGB"></output><button type="button" data-k="deviceGB" data-d="1">+</button></div></div>
 
     <h3>צפייה</h3>
@@ -877,7 +875,6 @@ function gb(x) { return (x < 1 ? x * 1000 + 'MB' : x + 'GB'); }
 function size(b) { return b >= 1e9 ? (b / 1073741824).toFixed(1) + 'GB' : Math.round(b / 1048576) + 'MB'; }
 function bridge(name, d) { try { return window.VODOS && VODOS[name] ? JSON.parse(VODOS[name]()) : d; } catch (e) { return d; } }
 function showSettings() {
-  $('pcGB').textContent = gb(settings.pcGB);
   $('deviceGB').textContent = gb(settings.deviceGB);
   each('[data-opt]', function (b) { b.setAttribute('aria-checked', String(!!settings[b.getAttribute('data-opt')])); }, sheet);
   var seen = ALL.filter(function (v) { return watched[v.f]; }).length;

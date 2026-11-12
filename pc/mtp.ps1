@@ -13,7 +13,8 @@ param(
   [string]$Target = 'Android\data\il.vodos.offline\files',
   [string]$Storage = '',  # האחסון שעבד בפעם הקודמת (למשל כרטיס הזיכרון) — מועדף
   [string]$Session = '',  # מזהה החיבור הנוכחי — בקשת עצירה מהאפליקציה היא הקובץ stop-<מזהה>.txt
-  [string]$Clean = ''     # עדכון יומי: האפליקציה מוחקת מהנגן כל סרטון שלא ברשימה, לפני ההעתקה
+  [string]$Clean = '',    # עדכון יומי: האפליקציה מוחקת מהנגן כל סרטון שלא ברשימה, לפני ההעתקה
+  [string]$Wait = ''      # הקבצים עוד יורדים: מחכים לכל אחד (או ל-<שם>.skip אם ההורדה נכשלה), ומוחקים אותו מהמחשב אחרי ההעתקה
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Console]::InputEncoding = [Text.Encoding]::UTF8
@@ -136,6 +137,9 @@ switch ($Action) {
     if (-not $folder) { Out-Json @{ have = @(); state = $null }; break }
     $items = @($folder.Items())
     $have = @($items | ForEach-Object { [string]$_.Name })
+    # הגודל של כל סרטון שכבר בנגן — נספר בנפח המירבי (המחשב לא שומר עותק)
+    $sizes = @{}
+    foreach ($i in $items) { if ($i.Name -match '\.(mp4|mov|m4v|webm)$') { $sizes[[string]$i.Name] = [double]$i.ExtendedProperty('System.Size') } }
     $text = $null
     $states = @($items | Where-Object { $_.Name -match '^state-\d+\.json$' } | Sort-Object { [long]($_.Name -replace '\D', '') } -Descending)
     foreach ($st in $states) {
@@ -148,7 +152,7 @@ switch ($Action) {
       try { $text = [IO.File]::ReadAllText($dest, [Text.Encoding]::UTF8); Remove-Item -LiteralPath $dest } catch { $text = $null }
       if ($text) { break }
     }
-    Out-Json @{ have = $have; state = $text; storage = $s.Name; hasIndex = $script:FirstHasIndex; free = [double]$s.ExtendedProperty('System.FreeSpace') }
+    Out-Json @{ have = $have; sizes = $sizes; state = $text; storage = $s.Name; hasIndex = $script:FirstHasIndex; free = [double]$s.ExtendedProperty('System.FreeSpace') }
   }
 
   # האם ביקשו בנגן לעצור את העדכון
@@ -199,7 +203,7 @@ switch ($Action) {
     # [string] — בלי זה כל שורה נושאת מאפיינים של PowerShell, וה-JSON מתנפח למגה-בייטים
     $all = @(Get-Content -LiteralPath $List -Encoding UTF8 | ForEach-Object { [string]$_ } | Where-Object { $_ })
     $names = $all | Where-Object { -not $have.ContainsKey($_) }
-    $names = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $Local $_) })
+    if ($Wait) { $names = @($names) } else { $names = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $Local $_) }) }
     Out-Json @{ todo = $names.Count; existing = $have.Count }
 
     function Copy-One($n) {
@@ -237,7 +241,22 @@ switch ($Action) {
       if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
       # לפני כל קובץ: אם ביקשו בנגן לעצור — מפסיקים (מה שכבר הועתק נשאר)
       if ($script:StopHit -or (Test-Stop)) { Out-Json @{ stopped = $true; copied = $done }; return }
+      $path = Join-Path $Local $n
+      if ($Wait) {
+        # הקובץ עוד יורד — מחכים לו (וכל 3 שניות בודקים שהנגן מחובר ושלא ביקשו לעצור)
+        $next = (Get-Date).AddSeconds(3)
+        while (-not (Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath "$path.skip")) {
+          Start-Sleep -Milliseconds 300
+          if ((Get-Date) -gt $next) {
+            $next = (Get-Date).AddSeconds(3)
+            if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected'; copied = $done }; return }
+            if (Test-Stop) { Out-Json @{ stopped = $true; copied = $done }; return }
+          }
+        }
+        if (-not (Test-Path -LiteralPath $path)) { $done++; Out-Json @{ file = $n; ok = $false; skipped = $true; done = $done }; continue }
+      }
       $ok = Copy-One $n
+      if ($Wait) { Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue }
       $done++
       Out-Json @{ file = $n; ok = $ok; done = $done }
     }
@@ -255,7 +274,7 @@ if ($Action -eq 'serve') {
     if (-not $line.Trim()) { continue }
     $req = $line | ConvertFrom-Json
     $Action = [string]$req.action; $Local = [string]$req.local; $List = [string]$req.list
-    $Storage = [string]$req.storage; $Session = [string]$req.session; $Clean = [string]$req.clean
+    $Storage = [string]$req.storage; $Session = [string]$req.session; $Clean = [string]$req.clean; $Wait = [string]$req.wait
     try { Invoke-Action } catch { Out-Json @{ error = $_.Exception.Message } }
     Out-Json @{ end = $req.id }
   }
