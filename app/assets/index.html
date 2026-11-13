@@ -236,6 +236,8 @@ svg{display:block}
 @keyframes popin{from{transform:scale(.6);opacity:0}}
 @keyframes pulse{to{opacity:.45}}
 @keyframes busy{from{transform:translateX(0)}to{transform:translateX(-186%)}}
+/* VODOS אונליין: מה ששייך רק לגרסה עם המחשב — מוסתר, ולהפך */
+.online .pconly,html:not(.online) .onlineonly{display:none!important}
 </style>
 </head>
 <body>
@@ -263,7 +265,7 @@ svg{display:block}
 <section class="page" id="pg-liked" hidden>
   <div class="phead"><b>אהבתי</b></div>
   <div class="grid" id="likedGrid"></div>
-  <div class="empty" id="likedEmpty" hidden><svg viewBox="0 0 24 24"><path d="M12 20.5l-1.3-1.2C5.6 14.7 2.5 11.9 2.5 8.4 2.5 5.6 4.7 3.5 7.4 3.5c1.6 0 3.1.7 4.1 1.9 1-1.2 2.5-1.9 4.1-1.9 2.7 0 4.9 2.1 4.9 4.9 0 3.5-3.1 6.3-8.2 10.9L12 20.5z"/></svg><b>עוד לא סימנת "אהבתי"</b>סרטון שתסמנו יישמר בנגן גם אחרי שצפיתם בו, ולא ייכלל במכסה</div>
+  <div class="empty" id="likedEmpty" hidden><svg viewBox="0 0 24 24"><path d="M12 20.5l-1.3-1.2C5.6 14.7 2.5 11.9 2.5 8.4 2.5 5.6 4.7 3.5 7.4 3.5c1.6 0 3.1.7 4.1 1.9 1-1.2 2.5-1.9 4.1-1.9 2.7 0 4.9 2.1 4.9 4.9 0 3.5-3.1 6.3-8.2 10.9L12 20.5z"/></svg><b>עוד לא סימנת "אהבתי"</b><span class="pconly">סרטון שתסמנו יישמר בנגן גם אחרי שצפיתם בו, ולא ייכלל במכסה</span><span class="onlineonly">סרטונים שתסמנו יחכו לכם כאן</span></div>
 </section>
 <!-- אני -->
 <section class="page" id="pg-me" hidden>
@@ -271,7 +273,7 @@ svg{display:block}
   <div class="prof">
     <div class="big"><img src="icon.png" alt=""></div>
     <h2>VODOS</h2>
-    <div class="handle">@offline</div>
+    <div class="handle"><span class="pconly">@offline</span><span class="onlineonly">@online</span></div>
     <div class="nums">
       <div><b id="meCount"></b><small>סרטונים</small></div>
       <div><b id="meNew"></b><small>לא נצפו</small></div>
@@ -341,16 +343,16 @@ svg{display:block}
   <div class="sheet">
     <h2>הגדרות</h2>
     <div class="stats">
-      <div><b id="stCount">–</b><small>סרטונים בנגן</small></div>
+      <div><b id="stCount">–</b><small>סרטונים<span class="pconly"> בנגן</span></small></div>
       <div><b id="stNew">–</b><small>עוד לא נצפו</small></div>
       <div><b id="stLiked">–</b><small>אהבתי</small></div>
     </div>
-    <div class="meter"><i id="stMeter"></i></div>
+    <div class="meter pconly"><i id="stMeter"></i></div>
     <p class="note" id="stSpace"></p>
 
-    <h3>העתקה מהמחשב</h3>
-    <p class="note">בכל עדכון המחשב מוריד את הסרטונים הכי חדשים ומעתיק אותם מיד לנגן — במחשב לא נשמר כלום. סרטונים ישנים מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
-    <div class="row"><div><b>נפח מירבי בנגן</b><small>כמה סרטונים יהיו בנגן — הכי חדשים עד הנפח הזה. "אהבתי" לא נספרים</small></div>
+    <h3 class="pconly">העתקה מהמחשב</h3>
+    <p class="note pconly">בכל עדכון המחשב מוריד את הסרטונים הכי חדשים ומעתיק אותם מיד לנגן — במחשב לא נשמר כלום. סרטונים ישנים מתחלפים בחדשים, וסרטונים שסימנתם "אהבתי" נשמרים ולא נכללים במכסה.</p>
+    <div class="row pconly"><div><b>נפח מירבי בנגן</b><small>כמה סרטונים יהיו בנגן — הכי חדשים עד הנפח הזה. "אהבתי" לא נספרים</small></div>
       <div class="step"><button type="button" data-k="deviceGB" data-d="-1">−</button><output id="deviceGB"></output><button type="button" data-k="deviceGB" data-d="1">+</button></div></div>
 
     <h3>צפייה</h3>
@@ -395,13 +397,22 @@ function ago(ts) {
   return new Date(t).toLocaleDateString('he-IL');
 }
 
+// VODOS אונליין (אפליקציה נפרדת, אותו מסך): כל הסרטונים מכל הערוצים ישר מהאתר, ומנוגנים מהכתובת שלהם —
+// בלי מחשב ובלי שום סרטון שנשמר בנגן. בדפדפן אפשר לבדוק עם ?online
+var ONLINE = !!(window.VODOS && VODOS.online) || /[?&]online\b/.test(location.search);
+if (ONLINE) document.documentElement.classList.add('online');
+
 // ---- הרשימה מהתיקייה (דרך האפליקציה; בדפדפן במחשב — index.json לבדיקה) ----
 var data = {};
-try { data = window.VODOS ? JSON.parse(VODOS.index()) : {}; } catch (e) {}
+try { data = window.VODOS && !ONLINE ? JSON.parse(VODOS.index()) : {}; } catch (e) {}
 if (window.VODOS && VODOS.immersive) VODOS.immersive();
-var base = data.base || '', idx = data.index || {}, sources = idx.sources || {};
-var ALL = (idx.videos || []).slice().sort(function (a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
-var BY = {}; ALL.forEach(function (v) { BY[v.f] = v; });
+var base = data.base || '', idx, sources, ALL, BY;
+function setData(index) {
+  idx = index || {}; sources = idx.sources || {};
+  ALL = (idx.videos || []).slice().sort(function (a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
+  BY = {}; ALL.forEach(function (v) { BY[v.f] = v; });
+}
+setData(data.index);
 function srcName(s) { return (sources[s] || {}).name || s; }
 function srcAvatar(s) { var a = (sources[s] || {}).avatar || ''; return !a ? '' : /^data:/.test(a) ? a : base + a; }
 
@@ -420,7 +431,7 @@ var likes = get('vod_likes', []), liked = {};
 likes.forEach(function (v) { liked[v.f] = 1; });
 function toggleLike(v) {
   if (liked[v.f]) { delete liked[v.f]; likes = likes.filter(function (x) { return x.f !== v.f; }); }
-  else { liked[v.f] = 1; likes.push({ f: v.f, s: v.s, t: v.t, ts: v.ts }); toast('נשמר — הסרטון יישאר בנגן'); }
+  else { liked[v.f] = 1; likes.push({ f: v.f, s: v.s, t: v.t, ts: v.ts }); toast(ONLINE ? 'נשמר באהבתי' : 'נשמר — הסרטון יישאר בנגן'); }
   set('vod_likes', likes);
   saveState(true);
 }
@@ -646,7 +657,7 @@ function more() {
   if (shown >= list.length && list.length && !feed.querySelector('.endslide')) {
     var e = document.createElement('div'); e.className = 'endslide';
     e.innerHTML = filter ? '<h2>זהו</h2>' + esc(filter.label)
-      : '<h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'זהו להפעם') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים';
+      : '<h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'זהו להפעם') + '</h2>' + (ONLINE ? 'סרטונים חדשים יופיעו כאן כשיעלו' : 'חברו את הנגן למחשב כדי לקבל סרטונים חדשים');
     feed.appendChild(e);
   }
 }
@@ -665,11 +676,12 @@ function reload(startF) {
   if (filter) $('filterLabel').textContent = filter.label;
   showTab();
   if (!ALL.length) {
-    feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין עדיין סרטונים</h2>חברו את הנגן למחשב שבו מותקנת התוכנה "VODOS לנגן", והסרטונים יועתקו אליו אוטומטית.</div>';
+    feed.innerHTML = ONLINE ? '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין סרטונים</h2>לחצו על הכפתור שבאמצע הסרגל כדי לרענן.</div>'
+      : '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין עדיין סרטונים</h2>חברו את הנגן למחשב שבו מותקנת התוכנה "VODOS לנגן", והסרטונים יועתקו אליו אוטומטית.</div>';
     return;
   }
   if (!list.length) {
-    feed.innerHTML = '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>חברו את הנגן למחשב כדי לקבל סרטונים חדשים</div>';
+    feed.innerHTML = '<div class="state"><h2>' + (feedMode === 'unwatched' ? 'ראית הכל' : 'אין סרטונים') + '</h2>' + (ONLINE ? 'סרטונים חדשים יופיעו כאן כשיעלו' : 'חברו את הנגן למחשב כדי לקבל סרטונים חדשים') + '</div>';
     return;
   }
   var start = 0;
@@ -709,14 +721,21 @@ var thumbTimers = {};
 function loadThumbs(grid, round) {
   clearTimeout(thumbTimers[grid.id]);
   if (!window.VODOS || !VODOS.thumb || !grid.offsetParent) return;
-  var missing = 0;
+  var missing = 0, h = window.innerHeight;
   each('button', function (b) {
     var img = b.querySelector('img'); if (img.getAttribute('src')) return;
+    // רק מה שעל המסך או קרוב אליו — ערוץ יכול להכיל אלפי סרטונים (השאר נטענים בגלילה)
+    var r = b.getBoundingClientRect(); if (r.top > h * 2 || r.bottom < -h) return;
     var u = VODOS.thumb(b.getAttribute('data-f'));
     if (u) { img.onload = function () { img.className = 'ok'; }; img.src = u; } else missing++;
   }, grid);
   if (missing && (round || 0) < 120) thumbTimers[grid.id] = setTimeout(function () { loadThumbs(grid, (round || 0) + 1); }, 700);
 }
+var thumbScroll = null;
+document.addEventListener('scroll', function () {
+  clearTimeout(thumbScroll);
+  thumbScroll = setTimeout(function () { each('.grid', function (g) { if (g.offsetParent) loadThumbs(g, 0); }); }, 150);
+}, true);
 function fillGrid(grid, vids, label, caption) {
   grid.innerHTML = gridHtml(vids, caption);
   grid._vids = vids; grid._label = label;
@@ -775,7 +794,8 @@ function renderMe() {
   $('meNew').textContent = ALL.length - seen;
   $('meLiked').textContent = likes.length;
   $('meSaved').textContent = Object.keys(saved).length;
-  $('meLast').textContent = idx.created ? 'עדכון אחרון מהמחשב: ' + ago(idx.created) : 'עוד לא היה עדכון מהמחשב';
+  $('meLast').textContent = ONLINE ? (idx.created ? 'הרשימה עודכנה ' + ago(idx.created) : '')
+    : idx.created ? 'עדכון אחרון מהמחשב: ' + ago(idx.created) : 'עוד לא היה עדכון מהמחשב';
   var hist = watchedList.slice().reverse().map(function (f) { return BY[f]; }).filter(Boolean).slice(0, 60);
   $('histEmpty').hidden = hist.length > 0;
   fillGrid($('histGrid'), hist, 'צפית לאחרונה', false);
@@ -881,7 +901,7 @@ function showSettings() {
   $('stCount').textContent = ALL.length;
   $('stNew').textContent = ALL.length - seen;
   $('stLiked').textContent = likes.length;
-  $('stWatched').textContent = seen ? 'צפית ב-' + seen + ' מתוך ' + ALL.length + ' הסרטונים שבנגן' : 'עוד לא צפית בסרטונים';
+  $('stWatched').textContent = seen ? 'צפית ב-' + seen + ' מתוך ' + ALL.length + (ONLINE ? ' הסרטונים' : ' הסרטונים שבנגן') : 'עוד לא צפית בסרטונים';
   var st = bridge('storage', null);
   if (st && st.used != null) {
     $('stSpace').textContent = 'הסרטונים תופסים ' + size(st.used) + ' · פנוי בנגן ' + size(st.free);
@@ -889,7 +909,7 @@ function showSettings() {
     setTimeout(function () { $('stMeter').style.width = Math.min(100, st.used / (st.used + st.free) * 100) + '%'; }, 60);
   } else $('stSpace').textContent = '';
   var ver = window.VODOS && VODOS.version ? VODOS.version() : '';
-  $('ver').textContent = 'VODOS' + (ver ? ' ' + ver : '') + ' · אופליין';
+  $('ver').textContent = 'VODOS' + (ver ? ' ' + ver : '') + (ONLINE ? ' · אונליין' : ' · אופליין');
 }
 function openSettings() { showSettings(); openSheet(sheet); }
 $('settingsDone').addEventListener('click', function () { closeSheet(sheet); });
@@ -966,7 +986,7 @@ function renderUpdate() {
   $('updStop').hidden = !on; $('updStop').disabled = halting; $('updStop').textContent = halting ? 'עוצר… זה לוקח כמה שניות' : 'עצור את העדכון';
   $('updLast').textContent = idx.created ? 'עדכון אחרון: ' + ago(idx.created) + ' · ' + ALL.length + ' סרטונים בנגן' : '';
 }
-function openUpdate() { if (hasBridge) lastS = syncStatus(); renderUpdate(); openSheet(upd); }
+function openUpdate() { if (ONLINE) return loadOnline(true); if (hasBridge) lastS = syncStatus(); renderUpdate(); openSheet(upd); }
 function stopSync() {
   if (!window.VODOS || !VODOS.stopSync) return;
   VODOS.stopSync(); pressedStop = Date.now();
@@ -1014,7 +1034,80 @@ window.vodosBack = function () {
 };
 document.addEventListener('visibilitychange', function () { if (!document.hidden && activeVideo && page === 'home') play(activeVideo); });
 
-showTab(); reload();
+// ---- VODOS אונליין: הרשימה מהאתר — אותה טבלה, אותו סינון ואותו סדר כמו באתר ובתוכנה במחשב ----
+var SITE = 'https://xnet2.github.io/VOD/';
+function parseCSV(text) {
+  var rows = [], row = [], field = '', q = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+      else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+function fileKey(url) { var m = /^https?:\/\/([^\/?#]+)([^?#]*)/.exec(url); return m ? m[1] + m[2] : url; }
+var EMOJI; try { EMOJI = new RegExp('\\p{Extended_Pictographic}', 'gu'); } catch (e) { EMOJI = /[\uD83C-\uDBFF][\uDC00-\uDFFF]|[☀-➿]/g; }
+// פרסומות: יותר משני אימוג'ים, שורה שחוזרת על עצמה, או מילה שחוזרת 3 פעמים
+function isMarketing(text, source, exempt) {
+  var t = (text || '').trim(); if (!t) return false;
+  if (exempt.indexOf(source) < 0 && (t.match(EMOJI) || []).length > 2) return true;
+  var lines = t.split(/\n+/).map(function (s) { return s.replace(/\s+/g, ' ').trim(); }).filter(function (s) { return s.length >= 5; });
+  var seenL = {};
+  for (var i = 0; i < lines.length; i++) { if (seenL[lines[i]]) return true; seenL[lines[i]] = 1; }
+  var wc = {}, words = t.split(/\s+/);
+  for (var j = 0; j < words.length; j++) { var w = words[j]; if (w.length >= 4 && (wc[w] = (wc[w] || 0) + 1) >= 3) return true; }
+  return false;
+}
+var onlineBusy = false;
+function loadOnline(refresh) {
+  if (onlineBusy) return;
+  onlineBusy = true;
+  $('syncBtn').classList.add('on');
+  if (refresh) toast('מרענן את הרשימה…');
+  else feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>טוען סרטונים…</h2></div>';
+  var cfg = {};
+  fetch(SITE + 'config.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (code) {
+    var w = {}; new Function('window', code)(w); cfg = w.VOD_CONFIG || {};
+    return fetch(cfg.SHEET_CSV, { cache: 'no-store' });
+  }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (csv) {
+    var rows = parseCSV(csv), head = rows.shift() || [], col = function (n) { return head.indexOf(n); };
+    var exempt = cfg.EMOJI_RULE_EXEMPT || [], avatars = cfg.SOURCE_AVATARS || {};
+    var all = rows.filter(function (r) { return r.length > 1; }).map(function (r) {
+      return { u: r[col('videoUrl')] || '', s: r[col('source')] || '', name: r[col('sourceName')] || '', av: r[col('avatar')] || '', t: r[col('text')] || '', ts: r[col('timestamp')] || '' };
+    }).filter(function (v) { return /^https:/.test(v.u) && !isMarketing(v.t, v.s, exempt); });
+    all.sort(function (a, b) { return (Date.parse(b.ts) || 0) - (Date.parse(a.ts) || 0); });
+    // בלי כפולים: אותו קובץ, או אותו טקסט ארוך
+    var files = {}, texts = {}, srcs = {}, videos = [];
+    all.forEach(function (v) {
+      var k = fileKey(v.u), t = plain(v.t);
+      if (files[k] || (t.length >= 15 && texts[t])) return;
+      files[k] = 1; if (t.length >= 15) texts[t] = 1;
+      if (!srcs[v.s]) {
+        var a = avatars[v.s] || v.av || '';
+        srcs[v.s] = { name: v.name || v.s, avatar: !a || /^data:/.test(a) ? a : new URL(a, SITE).href };
+      }
+      videos.push({ f: v.u, u: v.u, s: v.s, t: v.t, ts: v.ts }); // המפתח (לאהבתי / נצפו) הוא הכתובת עצמה
+    });
+    var keep = activeVideo && refresh ? activeVideo._f : null;
+    setData({ videos: videos, sources: srcs, created: new Date().toISOString() });
+    if (!refresh || page === 'home') reload(keep && BY[keep] ? keep : undefined);
+    if (refresh) toast(videos.length + ' סרטונים');
+  }).catch(function () {
+    if (refresh) toast('אין חיבור לאינטרנט');
+    else feed.innerHTML = '<div class="state"><img src="logo.png" alt="VODOS"><h2>אין חיבור לאינטרנט</h2>בדקו את החיבור ולחצו על הכפתור שבאמצע הסרגל כדי לנסות שוב.</div>';
+  }).then(function () { onlineBusy = false; $('syncBtn').classList.remove('on'); });
+}
+if (ONLINE) {
+  $('syncBtn').setAttribute('aria-label', 'רענון');
+  $('meUpdate').textContent = 'רענון הרשימה';
+  showTab(); loadOnline(false);
+} else { showTab(); reload(); }
 saveState(); // שהמחשב יקבל את ההגדרות גם אם לא שינו כלום
 })();
 </script>
