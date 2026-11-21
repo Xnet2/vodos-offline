@@ -21,7 +21,7 @@ public class Files extends ContentProvider {
   private File find(Uri uri) throws FileNotFoundException {
     String name = uri.getLastPathSegment();
     if (name == null || name.contains("/") || name.startsWith(".")) throw new FileNotFoundException();
-    for (File dir : getContext().getExternalFilesDirs(null)) {
+    for (File dir : Dirs.all(getContext())) {
       if (dir == null) continue;
       File f = new File(dir, name);
       if (f.isFile()) return f;

@@ -56,6 +56,9 @@ public class MainActivity extends Activity {
     ui.post(this::createWeb);
     new Thread(this::markFolders).start();
     if (Build.VERSION.SDK_INT >= 21) SyncJob.schedule(this); // התראות כשמחברים למחשב
+    // נגן בלי כרטיס זיכרון עם אנדרואיד 11+: הסרטונים יגיעו לתיקייה הגלויה VODOS — צריך הרשאת אחסון
+    if (Dirs.needPublic(this) && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+      requestPermissions(new String[] { android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, 8);
   }
 
   private void createWeb() {
@@ -78,9 +81,10 @@ public class MainActivity extends Activity {
   }
 
   // יוצר את התיקייה של האפליקציה (בזיכרון הפנימי ובכרטיס) עם קובץ סימון, ומודיע עליו למערכת —
-  // כך התוכנה במחשב רואה אותה דרך USB ויודעת שזה מכשיר עם VODOS
+  // כך התוכנה במחשב רואה אותה דרך USB ויודעת שזה מכשיר עם VODOS. בנגן שצריך — גם את התיקייה הגלויה VODOS
   private void markFolders() {
-    for (File dir : getExternalFilesDirs(null)) {
+    if (Dirs.needPublic(this)) Dirs.publicDir().mkdirs();
+    for (File dir : Dirs.all(MainActivity.this)) {
       if (dir == null) continue;
       File mark = new File(dir, "vodos.txt");
       try { if (!mark.exists()) new FileOutputStream(mark).close(); } catch (Exception e) { continue; }
@@ -124,7 +128,7 @@ public class MainActivity extends Activity {
     @JavascriptInterface
     public String index() {
       File best = null, bestDir = null;
-      for (File dir : getExternalFilesDirs(null)) {
+      for (File dir : Dirs.all(MainActivity.this)) {
         if (dir == null) continue;
         File[] list = dir.listFiles();
         if (list == null) continue;
@@ -139,7 +143,7 @@ public class MainActivity extends Activity {
         if (videos == null) index.put("videos", videos = new JSONArray());
         // "הבית" של הסרטונים: האחסון שבו נמצאים רובם (לא בהכרח איפה שה-index — אם המחשב העתיק פעם בטעות
         // לזיכרון הפנימי). סרטון שנמצא רק באחסון השני מקבל כתובת מלאה (u)
-        File[] dirs = getExternalFilesDirs(null);
+        File[] dirs = Dirs.all(MainActivity.this);
         int bestCount = -1;
         for (File d : dirs) {
           if (d == null) continue;
@@ -187,7 +191,7 @@ public class MainActivity extends Activity {
             if (f.isFile() && !keep.contains(n) && (n.startsWith("index-") || n.startsWith("sync-") || n.startsWith("status-") || n.startsWith("stop-") || n.matches(".+\\.(mp4|mov|m4v|webm|png|jpg|jpeg|webp|gif)"))) f.delete();
           }
           // עותקים באחסון השני (למשל בזיכרון הפנימי, כשהמחשב בחר בו בטעות) — כפולים או ישנים, נמחקים
-          for (File other : getExternalFilesDirs(null)) {
+          for (File other : Dirs.all(MainActivity.this)) {
             if (other == null || other.equals(dir)) continue;
             File[] ol = other.listFiles();
             if (ol != null) for (File f : ol) {
@@ -220,7 +224,7 @@ public class MainActivity extends Activity {
     public void saveState(final String json) {
       new Thread(() -> {
         String name = "state-" + System.currentTimeMillis() + ".json";
-        for (File dir : getExternalFilesDirs(null)) {
+        for (File dir : Dirs.all(MainActivity.this)) {
           if (dir == null) continue;
           List<String> scan = new ArrayList<>();
           File out = new File(dir, name);
@@ -255,7 +259,7 @@ public class MainActivity extends Activity {
       synchronized (pending) {
         if (pending.add(f)) thumbQueue.execute(() -> {
           File v = new File(filesDir, f);
-          if (!v.isFile()) for (File d : getExternalFilesDirs(null)) if (d != null && new File(d, f).isFile()) v = new File(d, f);
+          if (!v.isFile()) for (File d : Dirs.all(MainActivity.this)) if (d != null && new File(d, f).isFile()) v = new File(d, f);
           makeThumb(v, out);
         });
       }
@@ -310,6 +314,7 @@ public class MainActivity extends Activity {
 
   @Override
   public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+    if (code == 8) { new Thread(this::markFolders).start(); return; } // הרשאת אחסון — יוצרים עכשיו את התיקייה VODOS
     if (code != 7 || pendingDownload == null) return;
     String f = pendingDownload; pendingDownload = null;
     if (res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) saveToGallery(f);
@@ -321,7 +326,7 @@ public class MainActivity extends Activity {
       String result = "fail";
       try {
         File src = null;
-        for (File d : getExternalFilesDirs(null)) if (d != null && new File(d, f).isFile()) src = new File(d, f);
+        for (File d : Dirs.all(MainActivity.this)) if (d != null && new File(d, f).isFile()) src = new File(d, f);
         File dir = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES), "VODOS");
         dir.mkdirs();
         File out = new File(dir, f);

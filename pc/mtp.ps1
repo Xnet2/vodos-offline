@@ -65,6 +65,14 @@ function Wait-Storages {
 # האם המכשיר עדיין מחובר — בודקים לפני כל העתקה, כי העתקה למכשיר שנותק מקפיצה חלון שגיאה של Windows
 function Test-Connected { return [bool](@(Storage-Names).Count) }
 
+# בנגן עם אנדרואיד 11+ בלי כרטיס זיכרון Windows לא מצליח לכתוב ל-Android\data — שם האפליקציה יוצרת תיקייה גלויה
+# VODOS (עם vodos.txt) בשורש הזיכרון, וכל הקבצים עוברים דרכה. אחרת — התיקייה הרגילה של האפליקציה
+function Resolve-Target($sf) {
+  $pub = Get-Child $sf 'VODOS'
+  if ($pub -and $pub.IsFolder -and (Get-Child $pub.GetFolder 'vodos.txt')) { return 'VODOS' }
+  return $Target
+}
+
 function Get-Storages {
   Wait-Storages
   $sh = New-Object -ComObject Shell.Application
@@ -73,11 +81,13 @@ function Get-Storages {
     if ($dev.IsFileSystem -or ($Device -and $dev.Name -ne $Device)) { continue }  # כוננים רגילים (C: וכו') לא מעניינים
     foreach ($s in @($dev.GetFolder.Items())) {
       if (-not $s.IsFolder) { continue }
-      $app = Get-Path $s.GetFolder $Target.Substring(0, $Target.LastIndexOf('\'))
+      $t = Resolve-Target $s.GetFolder
+      # התיקייה של האפליקציה (files עוד יכולה לא להיות) — או התיקייה הגלויה עצמה
+      $app = if ($t -eq $Target) { Get-Path $s.GetFolder $Target.Substring(0, $Target.LastIndexOf('\')) } else { Get-Path $s.GetFolder $t }
       if (-not $app) { continue }
       $score = [double]$s.ExtendedProperty('System.FreeSpace')
-      $files = Get-Child $app 'files'
-      $hasIndex = [bool]($files -and (@($files.GetFolder.Items()) | Where-Object { $_.Name -like 'index-*.json' }))
+      $files = if ($t -eq $Target) { $c = Get-Child $app 'files'; if ($c) { $c.GetFolder } } else { $app }
+      $hasIndex = [bool]($files -and (@($files.Items()) | Where-Object { $_.Name -like 'index-*.json' }))
       if ($hasIndex) { $score += 2e15 }                          # הסרטונים כבר שם — הכי חשוב
       if ($Storage -and $s.Name -eq $Storage) { $score += 1e15 }
       $list += [pscustomobject]@{ Item = $s; Score = $score; HasIndex = $hasIndex }
@@ -97,11 +107,11 @@ function Get-AppFolder {
     foreach ($dev in (New-Object -ComObject Shell.Application).Namespace(17).Items()) {
       if ($dev.IsFileSystem) { continue }
       $s = Get-Child $dev.GetFolder $Storage
-      if ($s) { $f = Get-Path $s.GetFolder $Target; if ($f) { return $f } }
+      if ($s) { $f = Get-Path $s.GetFolder (Resolve-Target $s.GetFolder); if ($f) { return $f } }
     }
   }
   $s = Get-Storage
-  if ($s) { return (Get-Path $s.GetFolder $Target) }
+  if ($s) { return (Get-Path $s.GetFolder (Resolve-Target $s.GetFolder)) }
   return $null
 }
 
@@ -133,7 +143,7 @@ switch ($Action) {
   'state' {
     $s = Get-Storage
     if (-not $s) { Out-Json @{ error = 'not connected' }; return }
-    $folder = Get-Path $s.GetFolder $Target
+    $folder = Get-Path $s.GetFolder (Resolve-Target $s.GetFolder)
     if (-not $folder) { Out-Json @{ have = @(); state = $null }; break }
     $items = @($folder.Items())
     $have = @($items | ForEach-Object { [string]$_.Name })
@@ -164,7 +174,7 @@ switch ($Action) {
   'pull' {
     $s = Get-Storage
     if (-not $s) { Out-Json @{ error = 'not connected' }; return }
-    $folder = Get-Path $s.GetFolder $Target
+    $folder = Get-Path $s.GetFolder (Resolve-Target $s.GetFolder)
     $item = if ($folder) { $folder.ParseName($List) } else { $null }
     if (-not $item) { Out-Json @{ error = 'not found' }; return }
     $dest = Join-Path $Local $List
@@ -179,7 +189,7 @@ switch ($Action) {
   # קובץ אחד לנגן (הודעת מצב status-*.json) — בלי רשימת התקדמות
   # למקום שבו הסרטונים (או, בפעם הראשונה, לאחסון הכי מתאים). בודק שהקובץ באמת הגיע
   'put' {
-    if ($Storage) { Wait-Storages; $folder = Get-AppFolder } else { $s = Get-Storage; $folder = if ($s) { Get-Path $s.GetFolder $Target } else { $null } }
+    if ($Storage) { Wait-Storages; $folder = Get-AppFolder } else { $s = Get-Storage; $folder = if ($s) { Get-Path $s.GetFolder (Resolve-Target $s.GetFolder) } else { $null } }
     if (-not $folder) { Out-Json @{ error = 'not connected' }; return }
     if (-not (Test-Connected)) { Out-Json @{ error = 'disconnected' }; return }
     $folder.CopyHere((Join-Path $Local $List), 4 + 16 + 1024)
@@ -192,7 +202,7 @@ switch ($Action) {
     $s = Get-Storage
     if (-not $s) { Out-Json @{ error = 'not connected' }; return }
     $folder = $s.GetFolder
-    foreach ($part in $Target.Split('\')) {  # תיקיית האפליקציה כבר קיימת; כאן נוצרת רק files אם חסרה
+    foreach ($part in (Resolve-Target $s.GetFolder).Split('\')) {  # תיקיית האפליקציה כבר קיימת; כאן נוצרת רק files אם חסרה
       $child = Get-Child $folder $part
       if (-not $child) { $folder.NewFolder($part); Start-Sleep -Milliseconds 700; $child = Get-Child $folder $part }
       if (-not $child) { Out-Json @{ error = "cannot create $part" }; return }
@@ -232,8 +242,10 @@ switch ($Action) {
       if ($Clean) { $o.clean = $true; $o.keep = $all }
       $json = $o | ConvertTo-Json -Compress
       [IO.File]::WriteAllText((Join-Path $Local $sync), $json, (New-Object Text.UTF8Encoding $false))
-      [void](Copy-One $sync)
+      $okSync = Copy-One $sync
       Remove-Item -LiteralPath (Join-Path $Local $sync) -ErrorAction SilentlyContinue
+      # אפילו הקובץ הקטן הזה לא הגיע — Windows לא מצליח לכתוב לנגן; עדיף להגיד מיד מאשר להיתקע על הסרטונים
+      if (-not $okSync -and -not $script:StopHit) { Out-Json @{ error = 'cannot write'; copied = 0 }; return }
       if ($Clean) { Start-Sleep -Seconds 5 }  # זמן לאפליקציה למחוק את הישנים ולפנות מקום
     }
     $done = 0; $script:StopHit = $false

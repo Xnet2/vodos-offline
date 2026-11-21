@@ -91,7 +91,7 @@ final class Sync {
       if (session.isEmpty()) { log(ctx, "stop: no session"); return; }
       ctx.getSharedPreferences("sync", Context.MODE_PRIVATE).edit()
           .putString("stopSession", session).putLong("stopAt", System.currentTimeMillis()).apply();
-      for (File dir : ctx.getExternalFilesDirs(null)) {
+      for (File dir : Dirs.all(ctx)) {
         if (dir == null) continue;
         File f = new File(dir, "stop-" + session + ".txt");
         try { new java.io.FileOutputStream(f).close(); } catch (Exception e) { continue; }
@@ -163,7 +163,7 @@ final class Sync {
     java.util.Set<String> keep = new java.util.HashSet<>();
     for (int i = 0; i < k.length(); i++) keep.add(k.optString(i));
     int n = 0;
-    for (File dir : ctx.getExternalFilesDirs(null)) {
+    for (File dir : Dirs.all(ctx)) {
       if (dir == null) continue;
       File[] list = dir.listFiles();
       if (list != null) for (File f : list)
@@ -178,7 +178,7 @@ final class Sync {
 
   static File newest(Context ctx, String prefix) {
     File best = null;
-    for (File dir : ctx.getExternalFilesDirs(null)) {
+    for (File dir : Dirs.all(ctx)) {
       if (dir == null) continue;
       File[] list = dir.listFiles();
       if (list == null) continue;

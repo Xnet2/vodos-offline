@@ -444,7 +444,10 @@ async function syncDevice(dev) {
     log('שגיאה בעדכון:', e.message);
     // בלי אינטרנט אי אפשר לעדכן (המחשב לא שומר סרטונים מראש)
     const net = /fetch failed|HTTP \d|ENOTFOUND|ECONN|ETIMEDOUT|github|google/i.test(e.message);
-    status(net ? 'אין חיבור לאינטרנט' : 'העדכון נכשל', net ? 'בדקו שיש אינטרנט במחשב ולחצו שוב "התחל עדכון"' : 'נתקו וחברו שוב את הנגן', { error: true });
+    // Windows לא מצליח לכתוב לנגן (נגן בלי כרטיס זיכרון עם אנדרואיד 11+, כשהאפליקציה עוד לא יצרה את התיקייה VODOS)
+    const nowrite = /cannot write|cannot create/.test(e.message);
+    if (nowrite) status('המחשב לא מצליח לכתוב לנגן', 'עדכנו את האפליקציה VODOS בנגן, פתחו אותה ואשרו גישה לקבצים — ואז נתקו, חברו ולחצו שוב "התחל עדכון"', { error: true });
+    else status(net ? 'אין חיבור לאינטרנט' : 'העדכון נכשל', net ? 'בדקו שיש אינטרנט במחשב ולחצו שוב "התחל עדכון"' : 'נתקו וחברו שוב את הנגן', { error: true });
   } finally {
     clearInterval(stopTimer);
     if (checking) await checking;

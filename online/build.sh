@@ -17,7 +17,7 @@ cp "$APP"/assets/* "$OUT/assets/"
 
 "$BT/aapt2.exe" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BT/aapt2.exe" link -o "$OUT/base.apk" -I "$JAR" --manifest "$OUT/AndroidManifest.xml" -A "$OUT/assets" "$OUT/res.zip"
-"$JAVA_HOME/bin/javac" -encoding UTF-8 --release 8 -nowarn -classpath "$JAR" -d "$OUT/classes" $(find "$HERE/src" -name '*.java') 2>&1 | grep -v 'bootstrap\|options' || true
+"$JAVA_HOME/bin/javac" -encoding UTF-8 --release 8 -nowarn -classpath "$JAR" -d "$OUT/classes" $(find "$HERE/src" -name '*.java') > "$OUT/javac.log" 2>&1 || { grep -v 'bootstrap\|options' "$OUT/javac.log"; exit 1; } # שגיאה עוצרת את הבנייה
 "$JAVA_HOME/bin/java" -cp "$BT/lib/d8.jar" com.android.tools.r8.D8 --min-api 19 --lib "$JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 (cd "$OUT/dex" && "$JAVA_HOME/bin/jar" uf "$OUT/base.apk" classes.dex)
 "$BT/zipalign.exe" -f 4 "$OUT/base.apk" "$OUT/aligned.apk"
